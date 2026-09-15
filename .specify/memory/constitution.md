@@ -1,50 +1,83 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+## Sync Impact Report (temporary — remove before committing)
+Version: - → 1.0.0 (initial adoption)
+Modified principles: none (new document)
+Added sections: Core Principles (5), Additional Constraints, Development Workflow, Governance
+Removed sections: none
+Deferred TODO placeholders: none
+-->
+# Sale Track Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Integridade dos Dados Financeiros (NON-NEGOTIABLE)
+Números que afetam faturamento, caixa ou margem nunca são alterados silenciosamente.
+O valor da NFe é imutável, o custo é congelado na venda, e qualquer retificação passa por
+uma ação explícita (estorno com data, nunca recálculo silencioso).
+Racional: controle de MEI e confiabilidade contábil — um bug que corrompe histórico
+silenciosamente é o pior tipo de falha deste sistema.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Simplicidade Local e Single-User
+App local, sem login, SQLite como fonte de verdade; qualquer funcionalidade nova deve
+justificar o custo de complexidade que adiciona (YAGNI). O app deve operar com um comando.
+Racional: usuário único (MEI); complexidade antecipada (auth, nuvem, filas) é dívida, não
+ativo. Integrações futuras são adiadas até serem realmente necessárias.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Modelo de Dinheiro Verificável
+Faturamento (NFe + presencial) e Caixa (dinheiro recebido/gasto) são ledger separados e
+nunca fundidos. Taxas de marketplace e estornos são registros explícitos e rastreáveis;
+todo número do dashboard deve traçar de volta a um registro no banco.
+Racional: faturamento ≠ dinheiro recebido (taxas retidas, atrasos de repasse); confundir
+os dois gera lucro aparente incorreto.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Testes Obrigatórios no Pipeline de Importação (NON-NEGOTIABLE)
+Parsing de XML NFe 55, detecção de canal pelo nome do arquivo, deduplicação por número de
+nota e casamento de `cProd` exigem testes antes de serem confiáveis; red-green-refactor.
+Racional: este é o ponto onde um erro silencioso corrompe o faturamento sem alerta.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Stack Tipada e Manutenível
+Next.js fullstack (App Router + Server Actions) + SQLite via Drizzle (better-sqlite3) +
+Tailwind + ShadCN + Biome (lint/format) + Node LTS. Migrações de schema são versionadas;
+nunca há alteração de schema fora de migração.
+Racional: o mantenedor é técnico e evoluirá o app (ex.: integrações) — tipos e migrações
+previnem bugs de dinheiro silenciosos.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Additional Constraints
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+- **Stack fixa**: Next.js fullstack, SQLite (Drizzle + better-sqlite3), Tailwind + ShadCN,
+  Biome, Node LTS. Mudanças de stack exigem emenda constitucional.
+- **Dinheiro em centavos inteiros**: valores monetários nunca usam ponto flutuante e nunca
+  são arredondados silenciosamente; moeda BRL.
+- **NFe**: apenas modelo 55 (mercadoria); XML bruto é armazenado com a venda; a mesma nota
+  nunca importa duas vezes (dedup por número).
+- **Teto MEI**: configurável, default R$ 81.000,00/ano (vigente em 2026; propostas de
+  aumento monitoradas — não implementar como constante fixa).
+- **Canal**: detectado pelo padrão do nome do arquivo, sempre editável no lote antes do
+  import; padrão desconhecido pede confirmação manual.
+- **Backup**: cópia do arquivo SQLite + botão de exportar; dados locais não trafegam para
+  terceiros.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Development Workflow
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+- Seguir SDD do spec-kit por funcionalidade: `/speckit.specify` → `/speckit.plan` →
+  `/speckit.tasks` → `/speckit.implement` → `/speckit.converge`.
+- **Qualidade**: pipeline de importação com testes obrigatórios; lógica de dinheiro com
+  testes unitários; dashboard validado por testes de integração com XMLs de fixture.
+- **Migrações** via Drizzle; rodar `biome check` (lint + format) e typecheck antes de
+  qualquer commit.
+- **Commits** em estilo convencional (ex.: `docs:`, `feat:`, `fix:`).
+- Proibido mutar dados financeiros históricos de forma silenciosa; estorno é ação explícita.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- Esta Constitution prevalece sobre decisões ad hoc; emendas exigem documentação desta emenda
+  (via `/speckit.constitution`), versão incrementada e atualização do `docs/domain.md` quando
+  o domínio mudar.
+- Situações não cobertas: registrar decisão, revisar na próxima convergência e propor emenda
+  se recorrente.
+- Revisão de conformidade a cada `/speckit.converge`: números rastreáveis, NFe imutável,
+  fluxo de estorno explícito.
+- Versionamento semântico: MAJOR para mudanças incompatíveis/remoção de princípio; MINOR para
+  novo princípio ou orientação expandida; PATCH para clarificação/revisão de texto.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-09-15 | **Last Amended**: 2026-09-15
