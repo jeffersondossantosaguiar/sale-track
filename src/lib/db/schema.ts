@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { type SQLiteColumn, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
  * Schema Drizzle — Controle de Vendas MEI (sale-track).
@@ -151,20 +151,33 @@ export const saleItemRelations = relations(saleItems, ({ one }) => ({
   product: one(products, { fields: [saleItems.productId], references: [products.id] }),
 }));
 
-/* ============================ CashEntry ============================ */
+/* ===== CashEntry ===== */
 
-export const cashEntries = sqliteTable("cash_entries", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  date: integer("date", { mode: "timestamp" }).notNull(),
-  type: text("type").notNull(), // entrada | saida
-  category: text("category").notNull(), // taxas | filamento | energia | manutencao | embalagem | venda | outros
-  amountCents: integer("amount_cents").notNull(), // sempre > 0; sinal vem do type
-  description: text("description").notNull().default(""),
-  saleId: integer("sale_id").references(() => sales.id, { onDelete: "set null" }), // opcional
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+export const cashEntries = sqliteTable(
+  "cash_entries",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    date: integer("date", { mode: "timestamp" }).notNull(),
+    type: text("type").notNull(), // entrada | saida
+    category: text("category").notNull(), // taxas | filamento | energia | manutencao | embalagem | venda | outros
+    amountCents: integer("amount_cents").notNull(), // sempre > 0; sinal vem do type
+    description: text("description").notNull().default(""),
+    saleId: integer("sale_id").references(() => sales.id, { onDelete: "set null" }), // vínculo opcional
+    // Estorno explícito (D7): nunca excluir — status + data; reversalOfId aponta
+    // para a entrada que esta reversão cancela (a original fica `estornado`).
+    status: text("status").notNull().default("normal"), // normal | estornado
+    reversedAt: integer("reversed_at", { mode: "timestamp" }),
+    reversalOfId: integer("reversal_of_id").references((): SQLiteColumn => cashEntries.id, { onDelete: "set null" }), // preenchido na ENTRADA de reversão
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("cash_entries_date_idx").on(t.date),
+    index("cash_entries_category_idx").on(t.category),
+    index("cash_entries_reversal_idx").on(t.reversalOfId),
+  ],
+);
 
 export const cashEntryRelations = relations(cashEntries, ({ one }) => ({
   sale: one(sales, { fields: [cashEntries.saleId], references: [sales.id] }),

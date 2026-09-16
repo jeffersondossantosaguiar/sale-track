@@ -15,6 +15,9 @@ export default function DashboardLayout({ children }: Readonly<{ children: React
             <Link href="/products" className="hover:text-foreground">
               Produtos
             </Link>
+            <Link href="/cash" className="hover:text-foreground">
+              Caixa
+            </Link>
           </nav>
         </div>
       </header>

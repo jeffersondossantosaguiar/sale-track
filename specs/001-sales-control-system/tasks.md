@@ -143,10 +143,10 @@ data e o faturamento NFe não muda.
 
 ### Implementation for User Story 3
 
-- [ ] T032 [P] [US3] CRUD de `CASH_ENTRIES` (entradas/saídas por categoria) em `src/app/(dashboard)/cash/` (Server Actions + zod)
-- [ ] T033 [US3] Modelo de estorno explícito: estorno é status com data (não exclusão), em `src/lib/domain/cash.ts`
-- [ ] T034 [US3] Lógica de caixa separada do faturamento (ledger de caixa ≠ faturamento NFe) em `src/lib/domain/cashier.ts`
-- [ ] T035 [US3] UI do caixa em `src/app/(dashboard)/cash/` (entrada/saída, categoria, estorno)
+- [x] T032 [P] [US3] CRUD de `CASH_ENTRIES` (entradas/saídas por categoria) em `src/app/(dashboard)/cash/` (Server Actions + zod)
+- [x] T033 [US3] Modelo de estorno explícito: estorno é status com data (não exclusão), em `src/lib/domain/cash.ts`
+- [x] T034 [US3] Lógica de caixa separada do faturamento (ledger de caixa ≠ faturamento NFe) em `src/lib/domain/cashier.ts`
+- [x] T035 [US3] UI do caixa em `src/app/(dashboard)/cash/` (entrada/saída, categoria, estorno)
 
 **Checkpoint**: US3 funcional; caixa e estorno consistentes
 

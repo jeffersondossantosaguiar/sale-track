@@ -22,6 +22,13 @@
       "when": 1789587303420,
       "tag": "0002_categories_products",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789640000000,
+      "tag": "0003_cash_entries_reversal",
+      "breakpoints": true
     }
   ]
 }
