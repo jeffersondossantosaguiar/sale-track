@@ -21,11 +21,11 @@ contracts/xml-import.md
 
 **Purpose**: Inicialização do projeto e estrutura base
 
-- [ ] T001 Setup Next.js (App Router) + Tailwind + ShadCN + Biome em `src/` (Next 15, React 19, Node LTS 22)
-- [ ] T002 [P] Instalar dependências de dados: `drizzle-orm` + `better-sqlite3` + `drizzle-kit`
-- [ ] T003 [P] Configurar `tsconfig.json` paths (`@/*`) e o Biome (`npm run lint` = `biome check`)
-- [ ] T004 Criar variáveis de ambiente e `.env.example` (nenhum segredo; app local single-user)
-- [ ] T005 Configurar barrel de atalhos: `tsx` + scripts npm (`db:generate`, `db:migrate`, `db:seed`)
+- [x] T001 Setup Next.js (App Router) + Tailwind + ShadCN + Biome em `src/` (Next 15, React 19, Node LTS 22)
+- [x] T002 [P] Instalar dependências de dados: `drizzle-orm` + `better-sqlite3` + `drizzle-kit`
+- [x] T003 [P] Configurar `tsconfig.json` paths (`@/*`) e o Biome (`npm run lint` = `biome check`)
+- [x] T004 Criar variáveis de ambiente e `.env.example` (nenhum segredo; app local single-user)
+- [x] T005 Configurar barrel de atalhos: `tsx` + scripts npm (`db:generate`, `db:migrate`, `db:seed`)
 
 ---
 
@@ -35,16 +35,16 @@ contracts/xml-import.md
 
 **⚠️ CRITICAL**: Nenhum trabalho de user story começa antes desta fase
 
-- [ ] T006 Definir schema Drizzle completo em `src/lib/db/schema.ts` (cats, products, sales, sale_items, cash_entries, settings, product_codes) conforme `data-model.md`
-- [ ] T007 [P] Criar cliente SQLite `src/lib/db/client.ts` (better-sqlite3, WAL, foreign keys ON)
-- [ ] T008 [P] Configurar Drizzle Kit + pasta `src/lib/db/migrations/` (migrações versionadas; nunca alterar schema fora de migração)
-- [ ] T009 [P] Criar `src/lib/domain/money.ts` — helpers de centavos inteiros (parse/format BRL); NUNCA float
-- [ ] T010 [P] Criar `src/lib/domain/meiteto.ts` — cálculo de faturamento acumulado e % do teto (teto configurável, default 81.000)
-- [ ] T011 [P] Criar `src/lib/settings.ts` — leitura/escrita de `settings` (teto MEI, % padrão de taxa por canal)
-- [ ] T012 Seed de dados iniciais (categorias padrão + canal via `products/seed.ts`)
-- [ ] T013 [P] Configurar Server Actions em `src/app/actions/` e validação de input (zod) para mutações
+- [x] T006 Definir schema Drizzle completo em `src/lib/db/schema.ts` (cats, products, sales, sale_items, cash_entries, settings, product_codes) conforme `data-model.md`
+- [x] T007 [P] Criar cliente SQLite `src/lib/db/client.ts` (better-sqlite3, WAL, foreign keys ON)
+- [x] T008 [P] Configurar Drizzle Kit + pasta `src/lib/db/migrations/` (migrações versionadas; nunca alterar schema fora de migração)
+- [x] T009 [P] Criar `src/lib/domain/money.ts` — helpers de centavos inteiros (parse/format BRL); NUNCA float
+- [x] T010 [P] Criar `src/lib/domain/meiteto.ts` — cálculo de faturamento acumulado e % do teto (teto configurável, default 81.000)
+- [x] T011 [P] Criar `src/lib/settings.ts` — leitura/escrita de `settings` (teto MEI, % padrão de taxa por canal)
+- [x] T012 Seed de dados iniciais (categorias padrão + canal via `products/seed.ts`)
+- [x] T013 [P] Configurar Server Actions em `src/app/actions/` e validação de input (zod) para mutações
 
-**Checkpoint**: Fundação pronta — stories podem iniciar em paralelo
+**Checkpoint**: Fundação pronta — stories podem iniciar em paralelo ✅ (2026-09-16)
 
 ---
 
@@ -61,24 +61,29 @@ correto e o teto % aparece no dashboard.
 
 > **NOTE**: Escrever ANTES da implementação; devem FALHAR inicialmente. Red-green-refactor.
 
-- [ ] T014 [P] [US1] Unit test parse XML NFe 55 em `tests/unit/xml/` (melhoria = `tests/units/test_xml_parser.ts`)
-- [ ] T015 [US1] Unit test dedup por nº da nota (mesma NF não importa 2x) em `tests/unit/test_sales_dedup.ts`
-- [ ] T016 [P] [US1] Unit test detecção de canal pelo nome do arquivo (`..._invoice_file_...` → Shopee; nº puro → TikTok) em `tests/unit/test_channel.ts`
-- [ ] T017 [US1] Unit test casamento `cProd` → produto em `tests/unit/test_product_link.ts`
-- [ ] T018 [P] [US1] Contract test do schema XML importado em `tests/contract/test_xml_import.ts`
-- [ ] T019 [US1] Integration test do fluxo completo de import em `tests/integration/test_import_flow.ts` (XML → venda + faturamento)
+- [x] T014 [P] [US1] Unit test parse XML NFe 55 → `tests/xml-parser.test.ts` (e `tests/xml-worker.test.ts`)
+- [x] T015 [US1] Unit test dedup por nº da nota (mesma NF não importa 2x) → `tests/xml-dedup.test.ts`
+- [x] T016 [P] [US1] Unit test detecção de canal pelo nome do arquivo (`..._invoice_file_...` → Shopee; nº puro → TikTok) → `tests/xml-channel.test.ts`
+- [x] T017 [US1] Unit test casamento `cProd` → produto → `tests/xml-link.test.ts`
+- [x] T018 [P] [US1] Contract test do schema XML importado → `tests/contract-xml-import.test.ts`
+- [x] T019 [US1] Integration test do fluxo completo de import (XML → venda + faturamento) → `tests/integration-import.test.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T020 [P] [US1] Criar `src/lib/xml/parser.ts` — parse do XML NFe 55 (itens, totais, data, nº)
-- [ ] T021 [P] [US1] Criar `src/lib/xml/channel.ts` — detecção de canal por padrão do nome; canal descartável = erro/confirmação manual
-- [ ] T022 [P] [US1] Criar `src/lib/xml/worker.ts` — Web Worker para parse em lote (app responsivo)
-- [ ] T023 [US1] Criar `src/lib/xml/link.ts` — vínculo `cProd` → produto (códigos por canal via `product_codes`)
-- [ ] T024 [US1] Criar Server Action `importXml` em `src/app/actions/xml-import.ts` (dedup por nº da nota; itens sem vínculo → fila "códigos sem vínculo")
-- [ ] T025 [US1] Criar UI de importação em `src/app/(dashboard)/sales/import.tsx` (lote, edição de canal, preview antes de confirmar)
-- [ ] T026 [US1] Gravar XML bruto com a venda (`public/storage/`) e impedir re-import da mesma NF
+- [x] T020 [P] [US1] Criar `src/lib/xml/parser.ts` — parse do XML NFe 55 (itens, totais, data, nº)
+- [x] T021 [P] [US1] Criar `src/lib/xml/channel.ts` — detecção de canal por padrão do nome; canal descartável = erro/confirmação manual
+- [x] T022 [P] [US1] Criar `src/lib/xml/worker.ts` — Web Worker para parse em lote (app responsivo)
+- [x] T023 [US1] Criar `src/lib/xml/link.ts` — vínculo `cProd` → produto (códigos por canal via `product_codes`)
+- [x] T024 [US1] Criar Server Action `importXml` em `src/app/actions/xml-import.ts` (dedup por nº da nota; itens sem vínculo → fila "códigos sem vínculo")
+- [x] T025 [US1] Criar UI de importação em `src/app/(dashboard)/sales/page.tsx` + `sales/import-form.tsx` (lote, edição de canal, preview antes de confirmar)
+- [x] T026 [US1] Gravar XML bruto com a venda (`data/storage/` ao invés de `public/storage/` — PII fora do docroot, raiz estática p/ tracing) e impedir re-import da mesma NF
 
-**Checkpoint**: US1 funcional e testável isoladamente (MVP completo)
+**Checkpoint**: US1 funcional e testável isoladamente (MVP completo) ✅ (2026-09-16)
+- Validação real (local): 1.185 XMLs (1.155 Shopee + 30 TikTok) → 0 falhas de parse,
+  1.184 vendas + 1 "já importado", faturamento R$ 44.014,71 (≈54,3% do teto R$ 81.000),
+  re-import 100% idempotente. Fixtures em `tests/fixtures/xml/` (dados fictícios no
+  formato real — sem PII). Verificado também: `cProd` TikTok genérico ("Padrao") cai na
+  fila de itens sem vínculo (vínculo por descrição fica para US2).
 
 ---
 
@@ -92,7 +97,13 @@ que o custo fica congelado mesmo alterando o cadastro depois.
 
 ### Implementation for User Story 2
 
-- [ ] T027 [P] [US2] Criar model/CRUD de `CATEGORIES` e `PRODUCTS` em `src/app/(dashboard)/products/` (Server Actions + zod)
+- [x] T027 [P] [US2] Criar model/CRUD de `CATEGORIES` e `PRODUCTS` em `src/app/(dashboard)/products/` (Server Actions + zod)
+  - `src/lib/domain/catalog.ts` (schemas zod: nomes normalizados, centavos inteiros) + `src/lib/catalog/service.ts`
+    (CRUD com `Db` injectável; exclusões bloqueadas em uso — D7) + `src/app/actions/catalog.ts` + UI
+    (`categories-panel.tsx` / `products-panel.tsx`).
+  - Migração `0002_categories_products` escrita manualmente (drizzle-kit gera interativo e pede rename no
+    prompt; coluna foi criada, não renomeada) — tabela `categories` + `products.category_id` FK (drop `category` texto).
+  - Testes: `tests/catalog.test.ts` (12 casos) + seed cookie-cutter `Geral` (removível).
 - [ ] T028 [P] [US2] Criar `src/lib/domain/cxmoney.ts` — margem = (bruto − taxa − custo congelado), em centavos
 - [ ] T029 [US2] Gestão de `product_codes` (multi-código por canal) em `src/app/api/products/codes/` ou Server Action
 - [ ] T030 [US2] UI do catálogo em `src/app/(dashboard)/products/` (tabela, edição, preço/custo)

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `sales_invoice_dedup_idx` ON `sales` (`invoice_number`,`issue_date`,`invoice_serie`);

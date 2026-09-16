@@ -15,6 +15,13 @@ out/
 *.sqlite
 data/
 
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
+
+# XML brutos importados (auditoria local — nunca no git)
+# Arquivados em data/storage/ (fora do public) — cobertos por `data/`.
+data/storage/
+
 # Logs
 *.log
 npm-debug.log*
