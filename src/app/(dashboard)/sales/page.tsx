@@ -1,21 +1,30 @@
+import { listProducts } from "@/lib/catalog/service";
+import { listSales, monthlyGross } from "@/lib/sales/service";
 import type { Metadata } from "next";
 import XmlImportForm from "./import-form";
+import PresentialPanel from "./presential";
 
 export const metadata: Metadata = {
-  title: "Importar XML · sale-track",
+  title: "Vendas · sale-track",
 };
 
-export default function SalesImportPage() {
+export default function SalesPage() {
+  const sales = listSales();
+  const products = listProducts();
+  const now = new Date();
+  const month = { year: now.getFullYear(), month: now.getMonth() + 1 };
+  const monthTotal = monthlyGross(month);
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold">Importar vendas (NFe 55)</h1>
+        <h1 className="text-xl font-semibold">Vendas</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Seleciona os XMLs baixados do painel (Shopee/TikTok). O canal é sugerido pelo nome do arquivo e pode ser
-          ajustado antes de confirmar.
+          Importe as NFe baixadas dos painéis (Shopee/TikTok) e lance à mão as vendas presenciais — ambas contam para o
+          faturamento do mês e do teto MEI (a presencial também entra no caixa).
         </p>
       </div>
       <XmlImportForm />
+      <PresentialPanel initialSales={sales} initialMonthTotal={monthTotal} initialMonth={month} products={products} />
     </div>
   );
 }

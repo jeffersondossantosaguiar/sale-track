@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { dateSchema } from "./date";
 
 /**
  * Domínio do CAIXA (US3/T032–T033) — puras, sem I/O.
@@ -27,18 +28,9 @@ export const CASH_CATEGORY_LABELS: Record<CashCategory, string> = {
 export const cashEntryStatusSchema = z.enum(["normal", "estornado"]).default("normal");
 export type CashEntryStatus = z.infer<typeof cashEntryStatusSchema>;
 
-/** Data do lançamento aceita "YYYY-MM-DD" ou Date; rejeita valores inválidos. */
-const dateInput = z.preprocess((value) => {
-  if (value instanceof Date) return value;
-  const raw = String(value ?? "").trim();
-  if (!raw) return Number.NaN;
-  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00`) : new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? Number.NaN : parsed;
-}, z.date());
-
 /** Input de criação de lançamento (formulário ou API). */
 export const cashEntryInputSchema = z.object({
-  date: dateInput,
+  date: dateSchema,
   type: z.enum(CASH_TYPES),
   category: z.enum(CASH_CATEGORIES),
   amountCents: z.coerce.number().int("valor deve ser inteiro (centavos)").positive("valor deve ser > 0"),
@@ -55,7 +47,7 @@ export type CashEntryInput = z.input<typeof cashEntryInputSchema>;
 
 /** Input do estorno — data do estorno (aparece com data própria, D7). */
 export const reversalInputSchema = z.object({
-  date: dateInput,
+  date: dateSchema,
   description: z.string().trim().max(140, "descrição muito longa").optional().default(""),
 });
 

@@ -160,9 +160,9 @@ data e o faturamento NFe não muda.
 
 ### Implementation for User Story 4
 
-- [ ] T036 [US4] Server Action `createPresentialSale` em `src/app/actions/sales-presential.ts` (produto, quantidade, valor)
-- [ ] T037 [US4] Integrar venda presencial ao faturamento (bruto) + lançamento de entrada no caixa
-- [ ] T038 [US4] UI de venda presencial em `src/app/(dashboard)/sales/presential.tsx` (catálogo rápido, busca)
+- [x] T036 [US4] Server Action `createPresentialSale` em `src/app/actions/sales-presential.ts` (produto, quantidade, valor)
+- [x] T037 [US4] Integrar venda presencial ao faturamento (bruto) + lançamento de entrada no caixa
+- [x] T038 [US4] UI de venda presencial em `src/app/(dashboard)/sales/presential.tsx` (catálogo rápido, busca)
 
 **Checkpoint**: US4 funcional; venda presencial = lógica de caixa
 
