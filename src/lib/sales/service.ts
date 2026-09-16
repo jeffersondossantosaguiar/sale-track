@@ -5,7 +5,7 @@ import { feeFromBps, marginOf, netOf } from "@/lib/domain/cxmoney";
 import { MAX_FEE_BPS, channelFeeSettingKey, normalizeBps } from "@/lib/domain/fees";
 import { presentialSaleInputSchema } from "@/lib/domain/presential";
 import type { Channel } from "@/lib/xml/channel";
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { type SQL, and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 /**
  * Serviço de VENDAS (US4/T036–T037).
@@ -81,15 +81,38 @@ export function listSales(opts?: { db?: Db }): SaleRow[] {
   }));
 }
 
+export type FiscalMonth = { year: number; month: number };
+
+/** Limites local do mês (início inclusivo / fim exclusivo) — padrão do projeto (local midnight). */
+export function monthRange(month: FiscalMonth): { start: Date; end: Date } {
+  return { start: new Date(month.year, month.month - 1, 1), end: new Date(month.year, month.month, 1) };
+}
+
 /** Faturamento bruto do mês (year, month 1–12): vendas normais daquele mês. */
-export function monthlyGross(month: { year: number; month: number }, opts?: { db?: Db }): number {
+export function monthlyGross(month: FiscalMonth, opts?: { db?: Db }): number {
   const db = dbOf(opts);
-  const start = new Date(month.year, month.month - 1, 1);
-  const end = new Date(month.year, month.month, 1);
+  const { start, end } = monthRange(month);
   const row = db
     .select({ total: sql<number>`coalesce(sum(${sales.grossCents}), 0)` })
     .from(sales)
     .where(and(eq(sales.status, "normal"), gte(sales.saleDate, start), lt(sales.saleDate, end)))
+    .get();
+  return row?.total ?? 0;
+}
+
+/** Faturamento anual (year, ano-calendário): vendas normais de 1º jan a 31 dez (local). */
+export function annualGross(year: number, opts?: { db?: Db }): number {
+  const db = dbOf(opts);
+  const row = db
+    .select({ total: sql<number>`coalesce(sum(${sales.grossCents}), 0)` })
+    .from(sales)
+    .where(
+      and(
+        eq(sales.status, "normal"),
+        gte(sales.saleDate, new Date(year, 0, 1)),
+        lt(sales.saleDate, new Date(year + 1, 0, 1)),
+      ),
+    )
     .get();
   return row?.total ?? 0;
 }
@@ -200,8 +223,13 @@ export type ChannelSummaryRow = {
 };
 
 /** Resumo por canal do faturamento normal: bruto, total de taxas e líquido (US5.3). */
-export function byChannelSummary(opts?: { db?: Db }): ChannelSummaryRow[] {
+export function byChannelSummary(opts?: { db?: Db; month?: FiscalMonth }): ChannelSummaryRow[] {
   const db = dbOf(opts);
+  const conditions: SQL[] = [eq(sales.status, "normal")];
+  if (opts?.month) {
+    const { start, end } = monthRange(opts.month);
+    conditions.push(gte(sales.saleDate, start), lt(sales.saleDate, end));
+  }
   return db
     .select({
       channel: sales.channel,
@@ -211,7 +239,7 @@ export function byChannelSummary(opts?: { db?: Db }): ChannelSummaryRow[] {
       netCents: sql<number>`coalesce(sum(${sales.netCents}), 0)`,
     })
     .from(sales)
-    .where(eq(sales.status, "normal"))
+    .where(and(...conditions))
     .groupBy(sales.channel)
     .orderBy(sql`${sales.channel}`)
     .all() as ChannelSummaryRow[];

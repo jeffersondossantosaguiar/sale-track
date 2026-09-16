@@ -10,8 +10,8 @@ import { formatBRL } from "./money";
 export const DEFAULT_MEI_LIMIT_CENTS = 81_000 * 100; // R$ 81.000,00
 
 /** Lê o teto atual com fallback para o default da constituição. */
-export function getMeiLimitCents(): number {
-  return getNumberSetting("mei_limit_cents", DEFAULT_MEI_LIMIT_CENTS);
+export function getMeiLimitCents(opts?: { db?: import("../db/client").Db }): number {
+  return getNumberSetting("mei_limit_cents", DEFAULT_MEI_LIMIT_CENTS, opts);
 }
 
 /** Percentual do teto já usado em centavos de percentual (0..10000, i.e. 100.00%). */

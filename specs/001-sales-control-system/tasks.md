@@ -195,9 +195,9 @@ para declaração do MEI/DASN.
 
 ### Implementation for User Story 6
 
-- [ ] T042 [US6] Dashboard em `src/app/(dashboard)/page.tsx` — faturamento mensal, acumulado anual, % do teto (barra)
-- [ ] T043 [US6] Extrato exportável (CSV) em `src/app/api/export/route.ts` — faturamento + caixa para DASN
-- [ ] T044 [US6] Validação NFe imutável: toda exibição traça até registro do banco (compositional integrity)
+- [x] T042 [US6] Dashboard em `src/app/(dashboard)/page.tsx` — faturamento mensal, acumulado anual, % do teto (barra)
+- [x] T043 [US6] Extrato exportável (CSV) em `src/app/api/export/route.ts` — faturamento + caixa para DASN
+- [x] T044 [US6] Validação NFe imutável: toda exibição traça até registro do banco (compositional integrity)
 
 **Checkpoint**: Todas as stories funcionais
 

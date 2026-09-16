@@ -9,8 +9,11 @@ export default function DashboardLayout({ children }: Readonly<{ children: React
             sale-track <span className="font-normal text-muted-foreground">· MEI</span>
           </Link>
           <nav className="flex items-center gap-4 text-sm text-muted-foreground">
+            <Link href="/" className="hover:text-foreground">
+              Dashboard
+            </Link>
             <Link href="/sales" className="hover:text-foreground">
-              Importar XML
+              Vendas
             </Link>
             <Link href="/products" className="hover:text-foreground">
               Produtos
