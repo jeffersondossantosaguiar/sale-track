@@ -1,6 +1,14 @@
 import { type Db, getDb } from "@/lib/db/client";
 import { categories, productCodes, products, saleItems } from "@/lib/db/schema";
-import { type ProductPatch, categoryNameSchema, normalizeCategoryName, productInputSchema } from "@/lib/domain/catalog";
+import {
+  type ProductCodeInput,
+  type ProductPatch,
+  categoryNameSchema,
+  normalizeCategoryName,
+  productCodeChannelLabel,
+  productCodeInputSchema,
+  productInputSchema,
+} from "@/lib/domain/catalog";
 import { and, eq, sql } from "drizzle-orm";
 
 /**
@@ -196,5 +204,84 @@ export function deleteProduct(id: number, opts?: { db?: Db }): ServiceResult<{ i
   const used = db.select({ n: sql<number>`count(*)` }).from(saleItems).where(eq(saleItems.productId, id)).get()?.n ?? 0;
   if (used > 0) return { ok: false, error: `produto vinculado a ${used} venda(s)` };
   db.delete(products).where(eq(products.id, id)).run();
+  return { ok: true, value: { id } };
+}
+
+/* ============================ Product Codes ============================ */
+
+export type ProductCodeRow = {
+  id: number;
+  productId: number;
+  code: string;
+  channel: string | null; // null = geral (vale para qualquer canal)
+};
+
+export function listProductCodes(productId: number, opts?: { db?: Db }): ProductCodeRow[] {
+  const db = dbOf(opts);
+  return db
+    .select({
+      id: productCodes.id,
+      productId: productCodes.productId,
+      code: productCodes.code,
+      channel: productCodes.channel,
+    })
+    .from(productCodes)
+    .where(eq(productCodes.productId, productId))
+    .orderBy(productCodes.channel, productCodes.code)
+    .all();
+}
+
+export function createProductCode(
+  productId: number,
+  input: { code: string; channel: ProductCodeInput["channel"] },
+  opts?: { db?: Db },
+): ServiceResult<{ code: ProductCodeRow }> {
+  const db = dbOf(opts);
+  if (!db.select({ id: products.id }).from(products).where(eq(products.id, productId)).get()) {
+    return { ok: false, error: "produto não encontrado" };
+  }
+  const parsed = productCodeInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: zodMessage(parsed.error.issues) };
+  const { code, channel } = parsed.data;
+  const channelValue = channel === "geral" ? null : channel;
+
+  // unicidade por (code, channel): NULL não é deduplicado pelo índice UNIQUE,
+  // então checamos explicitamente aqui (código geral vs canal específico).
+  // Comparação case-insensitive para evitar variantes que nunca casariam no import.
+  const needle = code.toLowerCase();
+  const clash = db
+    .select({ id: productCodes.id, code: productCodes.code, channel: productCodes.channel })
+    .from(productCodes)
+    .where(eq(sql`lower(${productCodes.code})`, needle))
+    .all()
+    .find(
+      (row) =>
+        row.code.toLowerCase() === needle &&
+        (channelValue === null ? row.channel === null : row.channel === channelValue),
+    );
+  if (clash) {
+    return { ok: false, error: `código "${code}" já cadastrado para canal ${productCodeChannelLabel(channel)}` };
+  }
+
+  try {
+    const inserted = db.insert(productCodes).values({ productId, code, channel: channelValue, createdAt: now() }).run();
+    return {
+      ok: true,
+      value: { code: { id: Number(inserted.lastInsertRowid), productId, code, channel: channelValue } },
+    };
+  } catch (error) {
+    if (error instanceof Error && /UNIQUE/.test(error.message)) {
+      return { ok: false, error: `código "${code}" já cadastrado para canal ${productCodeChannelLabel(channel)}` };
+    }
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export function deleteProductCode(id: number, opts?: { db?: Db }): ServiceResult<{ id: number }> {
+  const db = dbOf(opts);
+  if (!db.select({ id: productCodes.id }).from(productCodes).where(eq(productCodes.id, id)).get()) {
+    return { ok: false, error: "código não encontrado" };
+  }
+  db.delete(productCodes).where(eq(productCodes.id, id)).run();
   return { ok: true, value: { id } };
 }

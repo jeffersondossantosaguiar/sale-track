@@ -3,18 +3,23 @@
 import { type ActionResult, actionData, actionError } from "@/lib/actions";
 import {
   type CategoryRow,
+  type ProductCodeRow,
   type ProductRow,
   createCategory as createCategoryService,
+  createProductCode as createProductCodeService,
   createProduct as createProductService,
   deleteCategory as deleteCategoryService,
+  deleteProductCode as deleteProductCodeService,
   deleteProduct as deleteProductService,
   listCategories,
+  listProductCodes as listProductCodesService,
   listProducts,
   renameCategory as renameCategoryService,
   setProductActive as setProductActiveService,
   updateProduct as updateProductService,
 } from "@/lib/catalog/service";
 import { getDb } from "@/lib/db/client";
+import type { ProductCodeInput } from "@/lib/domain/catalog";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -98,4 +103,40 @@ export async function deleteProduct(formData: FormData): Promise<ActionResult<{ 
   if (!result.ok) return actionError(result.error);
   revalidatePath("/products");
   return actionData({ products: listProducts({ db }) });
+}
+
+/* ============================ Product Codes (T029) ============================ */
+
+export async function getProductCodes(formData: FormData): Promise<ActionResult<{ codes: ProductCodeRow[] }>> {
+  const db = getDb().db;
+  return actionData({ codes: listProductCodesService(Number(formData.get("productId")), { db }) });
+}
+
+export async function addProductCode(
+  formData: FormData,
+): Promise<ActionResult<{ codes: ProductCodeRow[]; products: ProductRow[] }>> {
+  const db = getDb().db;
+  const productId = Number(formData.get("productId"));
+  const result = createProductCodeService(
+    productId,
+    {
+      code: String(formData.get("code") ?? ""),
+      channel: String(formData.get("channel") ?? "geral") as ProductCodeInput["channel"],
+    },
+    { db },
+  );
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ codes: listProductCodesService(productId, { db }), products: listProducts({ db }) });
+}
+
+export async function removeProductCode(
+  formData: FormData,
+): Promise<ActionResult<{ codes: ProductCodeRow[]; products: ProductRow[] }>> {
+  const db = getDb().db;
+  const productId = Number(formData.get("productId"));
+  const result = deleteProductCodeService(Number(formData.get("id")), { db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ codes: listProductCodesService(productId, { db }), products: listProducts({ db }) });
 }

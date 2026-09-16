@@ -49,3 +49,35 @@ export const productInputSchema = z.object({
 
 export type ProductInput = z.infer<typeof productInputSchema>;
 export type ProductPatch = Partial<ProductInput>;
+
+/* ============================ Product Code ============================ */
+
+export type ProductCodeChannel = "shopee" | "tiktok" | "geral";
+
+const PRODUCT_CODE_CHANNEL_LABELS: Record<ProductCodeChannel, string> = {
+  geral: "geral (todos os canais)",
+  shopee: "Shopee",
+  tiktok: "TikTok",
+};
+
+/** Rótulo legível do canal do código (UI/erros). */
+export function productCodeChannelLabel(channel: ProductCodeChannel): string {
+  return PRODUCT_CODE_CHANNEL_LABELS[channel];
+}
+
+export const productCodeChannelSchema = z.enum(["shopee", "tiktok", "geral"]);
+
+/**
+ * Input de código de produto (T029). `channel = "geral"` → NULL no banco
+ * (vale para qualquer canal); código normalizado para dedup previsível.
+ */
+export const productCodeInputSchema = z.object({
+  code: z
+    .string()
+    .transform(normalizeName)
+    .refine((v) => v.length >= 1, "código obrigatório")
+    .refine((v) => v.length <= 60, "código muito longo (máx. 60)"),
+  channel: productCodeChannelSchema.default("geral"),
+});
+
+export type ProductCodeInput = z.infer<typeof productCodeInputSchema>;

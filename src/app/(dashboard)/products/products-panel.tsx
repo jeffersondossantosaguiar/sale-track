@@ -5,6 +5,7 @@ import type { CategoryRow, ProductRow } from "@/lib/catalog/service";
 import { formatBRL, parseBrlToCents } from "@/lib/domain/money";
 import { cn } from "@/lib/utils";
 import { useState, useTransition } from "react";
+import CodesPanel from "./codes-panel";
 
 /**
  * T027 — CRUD de produtos (US2). Preço/custo em centavos; inputs em R$
@@ -22,6 +23,7 @@ export default function ProductsPanel({
 }) {
   const [products, setProducts] = useState<ProductRow[]>(initialProducts);
   const [editor, setEditor] = useState<Editor>(null);
+  const [codesFor, setCodesFor] = useState<ProductRow | null>(null);
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [price, setPrice] = useState("");
@@ -36,6 +38,13 @@ export default function ProductsPanel({
     }
     setMessage(null);
     setProducts(result.data.products);
+    setCodesFor((prev) => (prev ? (result.data.products.find((p) => p.id === prev.id) ?? null) : null));
+  };
+
+  const openCodes = (product: ProductRow) => {
+    setEditor(null);
+    setMessage(null);
+    setCodesFor(product);
   };
 
   const openCreate = () => {
@@ -194,6 +203,17 @@ export default function ProductsPanel({
         </div>
       )}
 
+      {codesFor && (
+        <CodesPanel
+          product={codesFor}
+          onClose={() => setCodesFor(null)}
+          onProducts={(next) => {
+            setProducts(next);
+            setCodesFor((prev) => (prev ? (next.find((p) => p.id === prev.id) ?? null) : null));
+          }}
+        />
+      )}
+
       {products.length === 0 ? (
         <p className="px-4 py-4 text-sm text-muted-foreground">
           Nenhum produto ainda — cadastre seu primeiro produto para começar a vincular os itens dos XMLs.
@@ -225,7 +245,16 @@ export default function ProductsPanel({
                   <td className="px-4 py-2 text-right text-xs">
                     {formatBRL(product.salePriceCents - product.estimatedCostCents)}
                   </td>
-                  <td className="px-4 py-2 text-right text-xs">{product.codeCount}</td>
+                  <td className="px-4 py-2 text-right text-xs">
+                    <button
+                      type="button"
+                      disabled={pending || !!editor}
+                      onClick={() => openCodes(product)}
+                      className="rounded-md border px-2 py-1 text-xs text-muted-foreground disabled:opacity-50"
+                    >
+                      {product.codeCount} {product.codeCount === 1 ? "código" : "códigos"}
+                    </button>
+                  </td>
                   <td className="px-4 py-2 text-xs">{product.active ? "sim" : "não"}</td>
                   <td className="px-4 py-2 text-right">
                     <span className="flex items-center justify-end gap-1">

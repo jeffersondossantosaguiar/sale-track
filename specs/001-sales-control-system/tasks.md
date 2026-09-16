@@ -108,7 +108,14 @@ que o custo fica congelado mesmo alterando o cadastro depois.
   - `feeFromBps` (taxa por basis points), `netOf` (líquido), `marginOf` (margem = `liquid_cents`),
     `marginBpsOf` (relativa). Guardas de inteiro/overflow; importer.ts usa `netOf`/`marginOf` (fonte única).
   - Testes: `tests/cxmoney.test.ts` (8 casos, TDD).
-- [ ] T029 [US2] Gestão de `product_codes` (multi-código por canal) em `src/app/api/products/codes/` ou Server Action
+- [x] T029 [US2] Gestão de `product_codes` (multi-código por canal) em `src/app/api/products/codes/` ou Server Action
+  - Server Actions (`getProductCodes`/`addProductCode`/`removeProductCode` em `src/app/actions/catalog.ts`)
+    + serviço (`createProductCode`/`listProductCodes`/`deleteProductCode` em `src/lib/catalog/service.ts`).
+  - Canal `"geral"` → NULL (vale p/ qualquer canal); unicidade por (code, channel) case-insensitive
+    (NULL não é dedup pelo índice UNIQUE — checagem explícita); mesmo code ok em canais distintos.
+  - Schema zod (`productCodeInputSchema`/`productCodeChannelSchema`) + labels no domínio.
+  - UI: `codes-panel.tsx` embutido no `products-panel.tsx` (botão "N códigos" por linha; listar/adicionar/remover).
+  - Testes: `tests/codes.test.ts` (7 casos, TDD) — inclui gancho no `linkCProd` (código casa cProd no import).
 - [ ] T030 [US2] UI do catálogo em `src/app/(dashboard)/products/` (tabela, edição, preço/custo)
 - [ ] T031 [US2] Resolver fila "códigos sem vínculo" — vínculo manual posterior aprende e atualiza novas importações
 
