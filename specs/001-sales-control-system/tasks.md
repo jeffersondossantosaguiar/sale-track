@@ -104,7 +104,10 @@ que o custo fica congelado mesmo alterando o cadastro depois.
   - Migração `0002_categories_products` escrita manualmente (drizzle-kit gera interativo e pede rename no
     prompt; coluna foi criada, não renomeada) — tabela `categories` + `products.category_id` FK (drop `category` texto).
   - Testes: `tests/catalog.test.ts` (12 casos) + seed cookie-cutter `Geral` (removível).
-- [ ] T028 [P] [US2] Criar `src/lib/domain/cxmoney.ts` — margem = (bruto − taxa − custo congelado), em centavos
+- [x] T028 [P] [US2] Criar `src/lib/domain/cxmoney.ts` — margem = (bruto − taxa − custo congelado), em centavos
+  - `feeFromBps` (taxa por basis points), `netOf` (líquido), `marginOf` (margem = `liquid_cents`),
+    `marginBpsOf` (relativa). Guardas de inteiro/overflow; importer.ts usa `netOf`/`marginOf` (fonte única).
+  - Testes: `tests/cxmoney.test.ts` (8 casos, TDD).
 - [ ] T029 [US2] Gestão de `product_codes` (multi-código por canal) em `src/app/api/products/codes/` ou Server Action
 - [ ] T030 [US2] UI do catálogo em `src/app/(dashboard)/products/` (tabela, edição, preço/custo)
 - [ ] T031 [US2] Resolver fila "códigos sem vínculo" — vínculo manual posterior aprende e atualiza novas importações

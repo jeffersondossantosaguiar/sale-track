@@ -1,3 +1,4 @@
+import { marginOf, netOf } from "@/lib/domain/cxmoney";
 import { type SQL, and, eq } from "drizzle-orm";
 import { type Db, getDb } from "../db/client";
 import { productCodes, products, saleItems, sales } from "../db/schema";
@@ -69,8 +70,9 @@ export function importNfeToDb(
     .map(({ item }) => ({ cProd: item.cProd, description: item.description }));
 
   const totalCost = linked.reduce((sum, item) => sum + (item.frozenCostCents ?? 0), 0);
-  const feeCents = 0; // D5: pré-preenchido/edítável por venda em US posterior
-  const netCents = invoice.grossCents - feeCents;
+  const feeCents = 0; // T040: taxa editável por venda (default = % do canal)
+  const netCents = netOf(invoice.grossCents, feeCents);
+  const liquidCents = marginOf(invoice.grossCents, feeCents, totalCost);
 
   try {
     const saleId = db.transaction((tx) => {
@@ -82,7 +84,7 @@ export function importNfeToDb(
           grossCents: invoice.grossCents,
           feeCents,
           netCents,
-          liquidCents: netCents - totalCost,
+          liquidCents,
           invoiceNumber: invoice.invoiceNumber,
           invoiceSerie: invoice.serie,
           issueDate: invoice.issueDate,
