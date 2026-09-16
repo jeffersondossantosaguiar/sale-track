@@ -10,6 +10,7 @@ import {
   byChannelSummary,
   getChannelFeeBps,
   listSales,
+  reverseSale,
   setSaleFee,
 } from "@/lib/sales/service";
 import type { Channel } from "@/lib/xml/channel";
@@ -51,5 +52,25 @@ export async function setChannelFeeFrom(formData: FormData): Promise<ActionResul
   const bps = normalizeBps(Number(formData.get("bps")));
   setNumberSetting(channelFeeSettingKey(channel), bps, { db });
   revalidatePath("/sales");
+  return feesState();
+}
+
+/**
+ * Estorna UMA venda (FR-011/T048): sai do faturamento e, se entrou no caixa,
+ * reverte com reembolso na data informada. Retorna o mesmo estado das taxas.
+ */
+export async function reverseSaleFrom(formData: FormData): Promise<ActionResult<FeesState>> {
+  const db = getDb().db;
+  const result = reverseSale(
+    Number(formData.get("id")),
+    {
+      refundDate: String(formData.get("date") ?? ""),
+      description: String(formData.get("description") ?? "") || undefined,
+    },
+    { db },
+  );
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/sales");
+  revalidatePath("/");
   return feesState();
 }

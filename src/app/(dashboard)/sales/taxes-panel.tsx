@@ -1,6 +1,6 @@
 "use client";
 
-import { type FeesState, setChannelFeeFrom, setSaleFeeFrom } from "@/app/actions/sales-fees";
+import { type FeesState, reverseSaleFrom, setChannelFeeFrom, setSaleFeeFrom } from "@/app/actions/sales-fees";
 import { MAX_FEE_BPS } from "@/lib/domain/fees";
 import { formatBRL } from "@/lib/domain/money";
 import type { ChannelSummaryRow, SaleRow } from "@/lib/sales/service";
@@ -69,6 +69,15 @@ export default function TaxesPanel({
     setMessage(null);
     setDrafts({});
     setFees(result.data);
+  };
+
+  const estornar = (sale: SaleRow) => {
+    const refundDate = window.prompt("Data do estorno (AAAA-MM-DD):", todayIso());
+    if (!refundDate) return;
+    const form = new FormData();
+    form.set("id", String(sale.id));
+    form.set("date", refundDate);
+    startTransition(async () => apply(await reverseSaleFrom(form)));
   };
 
   const grossTotal = fees.byChannel.reduce((sum, row) => sum + row.grossCents, 0);
@@ -169,6 +178,7 @@ export default function TaxesPanel({
                   <th className="px-4 py-2">Taxa</th>
                   <th className="px-4 py-2 text-right">Líquido</th>
                   <th className="px-4 py-2 text-right">Margem</th>
+                  <th className="px-4 py-2" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -218,6 +228,20 @@ export default function TaxesPanel({
                       </td>
                       <td className="px-4 py-2 text-right whitespace-nowrap">{formatBRL(sale.netCents)}</td>
                       <td className="px-4 py-2 text-right whitespace-nowrap text-xs">{formatBRL(sale.liquidCents)}</td>
+                      <td className="px-4 py-2 text-right whitespace-nowrap">
+                        {sale.status === "normal" ? (
+                          <button
+                            type="button"
+                            onClick={() => estornar(sale)}
+                            disabled={pending}
+                            className="rounded-md border px-2 py-1 text-xs text-muted-foreground hover:text-red-600 disabled:opacity-50"
+                          >
+                            Estornar
+                          </button>
+                        ) : (
+                          <span className="text-xs font-medium text-red-600">estornado</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -233,4 +257,10 @@ export default function TaxesPanel({
 /** centavos de taxa em % (bps p/ input): taxa é um percentual do bruto. */
 function inputBps(bps: number): string {
   return String(bps / 100);
+}
+
+function todayIso(): string {
+  const d = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }

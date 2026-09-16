@@ -2,10 +2,12 @@ import { type Db, getDb } from "@/lib/db/client";
 import { cashEntries, products, saleItems, sales } from "@/lib/db/schema";
 import { getSetting } from "@/lib/db/settings";
 import { feeFromBps, marginOf, netOf } from "@/lib/domain/cxmoney";
+import { dateSchema } from "@/lib/domain/date";
 import { MAX_FEE_BPS, channelFeeSettingKey, normalizeBps } from "@/lib/domain/fees";
 import { presentialSaleInputSchema } from "@/lib/domain/presential";
 import type { Channel } from "@/lib/xml/channel";
 import { type SQL, and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { z } from "zod";
 
 /**
  * Serviço de VENDAS (US4/T036–T037).
@@ -275,4 +277,62 @@ export function setSaleFee(saleId: number, feeBps: number, opts?: { db?: Db }): 
   const row = listSales({ db }).find((candidate) => candidate.id === saleId);
   if (!row) return { ok: false, error: "venda não encontrada após atualização" };
   return { ok: true, value: { sale: row } };
+}
+
+/**
+ * Estorna UMA venda (FR-011/T048): status `refunded` + refundDate com data própria.
+ * NFe imutável: o bruto e a taxa ficam gravados (registro do fato); a venda sai
+ * de todo faturamento (todos os agregados filtram status normal). Ledger D8:
+ * se a venda entrou no caixa (presencial), gera reembolso de MESMO valor (saída,
+ * categoria venda) na data do estorno; importadas (sem caixa) não geram NADA —
+ * nenhuma saída fantasma. Idempotência: estornar de novo é erro (D7).
+ */
+export function reverseSale(
+  saleId: number,
+  input: { refundDate: string | Date; description?: string },
+  opts?: { db?: Db },
+): ServiceResult<{ sale: SaleRow }> {
+  const db = dbOf(opts);
+  const sale = db.select().from(sales).where(eq(sales.id, saleId)).get();
+  if (!sale) return { ok: false, error: "venda não encontrada" };
+  if (sale.status === "refunded") return { ok: false, error: "venda já estornada" };
+
+  const parsed = reverseSaleInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: zodMessage(parsed.error.issues) };
+  const { refundDate, description } = parsed.data;
+
+  db.update(sales).set({ status: "refunded", refundDate }).where(eq(sales.id, saleId)).run();
+
+  const cashIn = db
+    .select({ total: sql<number>`coalesce(sum(${cashEntries.amountCents}), 0)` })
+    .from(cashEntries)
+    .where(and(eq(cashEntries.saleId, saleId), eq(cashEntries.type, "entrada")))
+    .get();
+  if (cashIn?.total) {
+    db.insert(cashEntries)
+      .values({
+        date: refundDate,
+        type: "saida",
+        category: "venda",
+        amountCents: cashIn.total,
+        description: description || `Estorno de venda ${sale.channel} (${saleDateLabel(sale.saleDate)})`,
+        saleId,
+        status: "normal",
+        createdAt: now(),
+      })
+      .run();
+  }
+
+  const row = listSales({ db }).find((candidate) => candidate.id === saleId);
+  if (!row) return { ok: false, error: "venda não encontrada após atualização" };
+  return { ok: true, value: { sale: row } };
+}
+
+const reverseSaleInputSchema = z.object({
+  refundDate: dateSchema,
+  description: z.string().trim().max(140, "descrição muito longa (máx. 140)").optional().default(""),
+});
+
+function saleDateLabel(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }

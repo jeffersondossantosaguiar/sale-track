@@ -207,10 +207,10 @@ para declaração do MEI/DASN.
 
 **Purpose**: Melhorias que atravessam múltiplas stories
 
-- [ ] T045 Rodar `npm run db:migrate` + validação do `quickstart.md` ponta a ponta
-- [ ] T046 Documentação final em `docs/` (rodapé de uso para MEI)
-- [ ] T047 Revisão de segurança: sem segredos, sem float em dinheiro, validação de input em toda mutação
-- [ ] T048 Revisão de integridade financeira: NFe imutável, estornos explícitos, dedup idempotente
+- [x] T045 Rodar `npm run db:migrate` + validação do `quickstart.md` ponta a ponta
+- [x] T046 Documentação final em `docs/` (rodapé de uso para MEI)
+- [x] T047 Revisão de segurança: sem segredos, sem float em dinheiro, validação de input em toda mutação
+- [x] T048 Revisão de integridade financeira: NFe imutável, estornos explícitos, dedup idempotente
 
 ---
 
