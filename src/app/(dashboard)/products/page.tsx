@@ -15,8 +15,10 @@ export default function ProductsPage() {
       <div>
         <h1 className="text-xl font-semibold">Catálogo de produtos</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Cadastro de produtos com preço/custo e categorias. Os códigos dos marketplaces (Shopee/TikTok) são vinculados
-          aos produtos para que cada importação de XML já traga o custo congelado na venda.
+          {products.length} {products.length === 1 ? "produto" : "produtos"} · {categories.length}{" "}
+          {categories.length === 1 ? "categoria" : "categorias"} — preço/custo em centavos, margem com taxa do canal
+          (cxmoney). Os códigos dos marketplaces (Shopee/TikTok) são vinculados aos produtos para que cada importação de
+          XML já traga o custo congelado na venda.
         </p>
       </div>
 

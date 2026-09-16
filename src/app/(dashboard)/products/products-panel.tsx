@@ -2,9 +2,10 @@
 
 import { createProduct, deleteProduct, setProductActive, updateProduct } from "@/app/actions/catalog";
 import type { CategoryRow, ProductRow } from "@/lib/catalog/service";
+import { marginBpsOf, marginOf } from "@/lib/domain/cxmoney";
 import { formatBRL, parseBrlToCents } from "@/lib/domain/money";
 import { cn } from "@/lib/utils";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import CodesPanel from "./codes-panel";
 
 /**
@@ -24,6 +25,7 @@ export default function ProductsPanel({
   const [products, setProducts] = useState<ProductRow[]>(initialProducts);
   const [editor, setEditor] = useState<Editor>(null);
   const [codesFor, setCodesFor] = useState<ProductRow | null>(null);
+  const [filter, setFilter] = useState("");
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [price, setPrice] = useState("");
@@ -40,6 +42,18 @@ export default function ProductsPanel({
     setProducts(result.data.products);
     setCodesFor((prev) => (prev ? (result.data.products.find((p) => p.id === prev.id) ?? null) : null));
   };
+
+  const visibleProducts = useMemo(() => {
+    const needle = filter.trim().toLowerCase();
+    if (!needle) return products;
+    return products.filter((p) => p.name.toLowerCase().includes(needle));
+  }, [products, filter]);
+
+  const totals = useMemo(() => {
+    const price = products.reduce((sum, product) => sum + product.salePriceCents, 0);
+    const cost = products.reduce((sum, product) => sum + product.estimatedCostCents, 0);
+    return { price, cost, margin: marginOf(price, 0, cost), active: products.filter((p) => p.active).length };
+  }, [products]);
 
   const openCodes = (product: ProductRow) => {
     setEditor(null);
@@ -125,15 +139,31 @@ export default function ProductsPanel({
     <section className="rounded-lg border bg-card">
       <div className="flex items-center justify-between border-b px-4 py-3">
         <h2 className="text-sm font-semibold">Produtos</h2>
-        <button
-          type="button"
-          onClick={openCreate}
-          disabled={pending || !!editor}
-          className="rounded-md bg-primary px-3 py-1 text-sm font-medium text-primary-foreground disabled:opacity-50"
-        >
-          + Novo produto
-        </button>
+        <span className="text-xs text-muted-foreground">
+          {products.length} {products.length === 1 ? "produto" : "produtos"} · {totals.active} ativo
+          {totals.active === 1 ? "" : "s"}
+          <span className="mx-2 text-border">|</span>
+          <button
+            type="button"
+            onClick={openCreate}
+            disabled={pending || !!editor}
+            className="rounded-md bg-primary px-3 py-1 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            + Novo produto
+          </button>
+        </span>
       </div>
+
+      {products.length > 0 && (
+        <div className="border-b px-4 py-3">
+          <input
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder={`Filtrar por nome (${products.length} produtos)`}
+            className="w-full max-w-xs rounded-md border bg-background px-3 py-1.5 text-sm"
+          />
+        </div>
+      )}
 
       {editor && (
         <div className="space-y-3 border-b px-4 py-4">
@@ -234,7 +264,7 @@ export default function ProductsPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {products.map((product) => (
+              {visibleProducts.map((product) => (
                 <tr key={product.id} className={cn(!product.active && "opacity-60")}>
                   <td className="max-w-60 px-4 py-2">
                     <span className="line-clamp-2">{product.name}</span>
@@ -243,7 +273,19 @@ export default function ProductsPanel({
                   <td className="px-4 py-2 text-right">{formatBRL(product.salePriceCents)}</td>
                   <td className="px-4 py-2 text-right">{formatBRL(product.estimatedCostCents)}</td>
                   <td className="px-4 py-2 text-right text-xs">
-                    {formatBRL(product.salePriceCents - product.estimatedCostCents)}
+                    {formatBRL(marginOf(product.salePriceCents, 0, product.estimatedCostCents))}
+                    {product.salePriceCents > 0 && (
+                      <span className="ml-1 text-muted-foreground">
+                        (
+                        {formatPercentBps(
+                          marginBpsOf(
+                            product.salePriceCents,
+                            marginOf(product.salePriceCents, 0, product.estimatedCostCents),
+                          ),
+                        )}
+                        )
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-right text-xs">
                     <button
@@ -288,6 +330,29 @@ export default function ProductsPanel({
               ))}
             </tbody>
           </table>
+          {visibleProducts.length === 0 && (
+            <p className="px-4 py-4 text-sm text-muted-foreground">Nenhum produto corresponde a “{filter.trim()}”.</p>
+          )}
+        </div>
+      )}
+
+      {products.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-t px-4 py-2 text-xs text-muted-foreground">
+          <span>
+            Preço: <strong className="text-foreground">{formatBRL(totals.price)}</strong>
+          </span>
+          <span>
+            Custo: <strong className="text-foreground">{formatBRL(totals.cost)}</strong>
+          </span>
+          <span>
+            Margem esperada:{" "}
+            <strong className={cn(totals.margin < 0 ? "text-red-600" : "text-foreground")}>
+              {formatBRL(totals.margin)}
+            </strong>
+            {totals.price > 0 && (
+              <span className="ml-1">({formatPercentBps(marginBpsOf(totals.price, totals.margin))})</span>
+            )}
+          </span>
         </div>
       )}
 
@@ -298,4 +363,8 @@ export default function ProductsPanel({
 
 function toBRLInput(cents: number): string {
   return (cents / 100).toFixed(2).replace(".", ",");
+}
+
+function formatPercentBps(bps: number): string {
+  return `${(bps / 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 }

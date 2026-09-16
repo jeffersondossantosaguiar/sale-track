@@ -116,7 +116,10 @@ que o custo fica congelado mesmo alterando o cadastro depois.
   - Schema zod (`productCodeInputSchema`/`productCodeChannelSchema`) + labels no domínio.
   - UI: `codes-panel.tsx` embutido no `products-panel.tsx` (botão "N códigos" por linha; listar/adicionar/remover).
   - Testes: `tests/codes.test.ts` (7 casos, TDD) — inclui gancho no `linkCProd` (código casa cProd no import).
-- [ ] T030 [US2] UI do catálogo em `src/app/(dashboard)/products/` (tabela, edição, preço/custo)
+- [x] T030 [US2] UI do catálogo em `src/app/(dashboard)/products/` (tabela, edição, preço/custo)
+  - Refino: contadores no header (produtos/categorias), filtro por nome, margem R$ + % (via `marginBpsOf`),
+    rodapé de totais (preço/custo/margem esperada via `marginOf`), estados vazios com filtro.
+  - Verificado: 65/65 testes, typecheck, biome, build (4 rotas) e dev `/products` 200.
 - [ ] T031 [US2] Resolver fila "códigos sem vínculo" — vínculo manual posterior aprende e atualiza novas importações
 
 **Checkpoint**: US1 + US2 funcional; venda com margem correta
