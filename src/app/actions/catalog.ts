@@ -5,15 +5,19 @@ import {
   type CategoryRow,
   type ProductCodeRow,
   type ProductRow,
+  type UnlinkedGroup,
+  applyCurrentCostToUncosted as applyCurrentCostService,
   createCategory as createCategoryService,
   createProductCode as createProductCodeService,
   createProduct as createProductService,
   deleteCategory as deleteCategoryService,
   deleteProductCode as deleteProductCodeService,
   deleteProduct as deleteProductService,
+  linkUnlinkedToProduct as linkUnlinkedService,
   listCategories,
   listProductCodes as listProductCodesService,
   listProducts,
+  listUnlinkedGroups,
   renameCategory as renameCategoryService,
   setProductActive as setProductActiveService,
   updateProduct as updateProductService,
@@ -139,4 +143,41 @@ export async function removeProductCode(
   if (!result.ok) return actionError(result.error);
   revalidatePath("/products");
   return actionData({ codes: listProductCodesService(productId, { db }), products: listProducts({ db }) });
+}
+
+/* ============================ Unlinked queue (T031) ============================ */
+
+export async function listUnlinked(): Promise<ActionResult<{ groups: UnlinkedGroup[] }>> {
+  return actionData({ groups: listUnlinkedGroups() });
+}
+
+export async function linkUnlinked(
+  formData: FormData,
+): Promise<ActionResult<{ groups: UnlinkedGroup[]; products: ProductRow[] }>> {
+  const db = getDb().db;
+  const result = linkUnlinkedService(
+    {
+      productId: Number(formData.get("productId")),
+      cProd: String(formData.get("cProd") ?? ""),
+      channel: String(formData.get("channel") ?? ""),
+    },
+    { db },
+  );
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ groups: listUnlinkedGroups({ db }), products: listProducts({ db }) });
+}
+
+export async function applyCurrentCost(): Promise<
+  ActionResult<{ groups: UnlinkedGroup[]; products: ProductRow[]; updated: number }>
+> {
+  const db = getDb().db;
+  const result = applyCurrentCostService({ db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({
+    groups: listUnlinkedGroups({ db }),
+    products: listProducts({ db }),
+    updated: result.value.updated,
+  });
 }

@@ -120,7 +120,14 @@ que o custo fica congelado mesmo alterando o cadastro depois.
   - Refino: contadores no header (produtos/categorias), filtro por nome, margem R$ + % (via `marginBpsOf`),
     rodapé de totais (preço/custo/margem esperada via `marginOf`), estados vazios com filtro.
   - Verificado: 65/65 testes, typecheck, biome, build (4 rotas) e dev `/products` 200.
-- [ ] T031 [US2] Resolver fila "códigos sem vínculo" — vínculo manual posterior aprende e atualiza novas importações
+- [x] T031 [US2] Resolver fila "códigos sem vínculo" — vínculo manual posterior aprende e atualiza novas importações
+  - `listUnlinkedGroups` (agrupa por (cProd, canal), ignora vinculados); `linkUnlinkedToProduct` aprende o código
+    (`product_codes`, presencial → "geral"/NULL) e faz backfill de `product_id` só no canal — NUNCA toca
+    `frozenCostCents` (D6); idempotente (código já existente do mesmo produto; outro produto → erro).
+  - `applyCurrentCostToUncosted`: preenche SO itens com `frozen_cost_cents IS NULL` (FR-006/aceite 5) e
+    recalcula `liquid_cents` das vendas afetadas.
+  - UI: `unlinked-panel.tsx` em `/products` (linkar select+produto por grupo; botão "aplicar custo atual").
+  - Testes: `tests/unlinked.test.ts` (6 casos, TDD).
 
 **Checkpoint**: US1 + US2 funcional; venda com margem correta
 

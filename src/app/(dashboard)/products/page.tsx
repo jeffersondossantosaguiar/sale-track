@@ -1,7 +1,8 @@
-import { listCategories, listProducts } from "@/lib/catalog/service";
+import { listCategories, listProducts, listUnlinkedGroups } from "@/lib/catalog/service";
 import type { Metadata } from "next";
 import CategoriesPanel from "./categories-panel";
 import ProductsPanel from "./products-panel";
+import UnlinkedPanel from "./unlinked-panel";
 
 export const metadata: Metadata = {
   title: "Produtos · sale-track",
@@ -10,6 +11,7 @@ export const metadata: Metadata = {
 export default function ProductsPage() {
   const categories = listCategories();
   const products = listProducts();
+  const unlinked = listUnlinkedGroups();
   return (
     <div className="space-y-6">
       <div>
@@ -24,6 +26,7 @@ export default function ProductsPage() {
 
       <CategoriesPanel initialCategories={categories} />
       <ProductsPanel initialProducts={products} categories={categories} />
+      <UnlinkedPanel initialGroups={unlinked} products={products} />
     </div>
   );
 }
