@@ -178,9 +178,9 @@ com líquido calculado; editar a taxa de uma venda específica.
 
 ### Implementation for User Story 5
 
-- [ ] T039 [US5] Campo taxa editável por venda (default = % padrão do canal) em `src/app/actions/sales-fees.ts`
-- [ ] T040 [US5] Cálculo de líquido (bruto − taxa) e persistência por venda em `src/lib/domain/` — sem mutar faturamento bruto
-- [ ] T041 [US5] UI de taxas na tela da venda (edição, valor líquido visível)
+- [x] T039 [US5] Campo taxa editável por venda (default = % padrão do canal) em `src/app/actions/sales-fees.ts`
+- [x] T040 [US5] Cálculo de líquido (bruto − taxa) e persistência por venda em `src/lib/domain/` — sem mutar faturamento bruto
+- [x] T041 [US5] UI de taxas na tela da venda (edição, valor líquido visível)
 
 **Checkpoint**: US5 funcional; líquido correto sem alterar faturamento
 

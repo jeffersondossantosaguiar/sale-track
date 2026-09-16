@@ -1,7 +1,10 @@
 import { type Db, getDb } from "@/lib/db/client";
 import { cashEntries, products, saleItems, sales } from "@/lib/db/schema";
-import { marginOf } from "@/lib/domain/cxmoney";
+import { getSetting } from "@/lib/db/settings";
+import { feeFromBps, marginOf, netOf } from "@/lib/domain/cxmoney";
+import { MAX_FEE_BPS, channelFeeSettingKey, normalizeBps } from "@/lib/domain/fees";
 import { presentialSaleInputSchema } from "@/lib/domain/presential";
+import type { Channel } from "@/lib/xml/channel";
 import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 /**
@@ -179,4 +182,69 @@ export function createPresentialSale(input: unknown, opts?: { db?: Db }): Servic
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+/* ============================ Taxas (US5/T039–T040) ============================ */
+
+/** % padrão configurada para um canal (0 quando ausente) — usada na importação. */
+export function getChannelFeeBps(channel: Channel, opts?: { db?: Db }): number {
+  return normalizeBps(getSetting(channelFeeSettingKey(channel), opts));
+}
+
+export type ChannelSummaryRow = {
+  channel: string;
+  count: number;
+  grossCents: number;
+  feeCents: number;
+  netCents: number;
+};
+
+/** Resumo por canal do faturamento normal: bruto, total de taxas e líquido (US5.3). */
+export function byChannelSummary(opts?: { db?: Db }): ChannelSummaryRow[] {
+  const db = dbOf(opts);
+  return db
+    .select({
+      channel: sales.channel,
+      count: sql<number>`count(*)`,
+      grossCents: sql<number>`coalesce(sum(${sales.grossCents}), 0)`,
+      feeCents: sql<number>`coalesce(sum(${sales.feeCents}), 0)`,
+      netCents: sql<number>`coalesce(sum(${sales.netCents}), 0)`,
+    })
+    .from(sales)
+    .where(eq(sales.status, "normal"))
+    .groupBy(sales.channel)
+    .orderBy(sql`${sales.channel}`)
+    .all() as ChannelSummaryRow[];
+}
+
+/** Custo total congelado de uma venda (Σ frozenCost × qty). */
+function totalCostCentsOf(db: Db, saleId: number): number {
+  const row = db
+    .select({ cost: sql<number>`coalesce(sum(${saleItems.frozenCostCents} * ${saleItems.quantity}), 0)` })
+    .from(saleItems)
+    .where(eq(saleItems.saleId, saleId))
+    .get();
+  return row?.cost ?? 0;
+}
+
+/**
+ * Ajusta a taxa de UMA venda (T040/T041): taxa → líquido → margem, SEM nunca
+ * tocar o bruto (faturamento da NFe é imutável). O caixa não muda (ledger D8).
+ */
+export function setSaleFee(saleId: number, feeBps: number, opts?: { db?: Db }): ServiceResult<{ sale: SaleRow }> {
+  const db = dbOf(opts);
+  if (!Number.isFinite(feeBps) || feeBps < 0 || feeBps > MAX_FEE_BPS) {
+    return { ok: false, error: `taxa deve estar entre 0% e 100% (${feeBps})` };
+  }
+  const sale = db.select().from(sales).where(eq(sales.id, saleId)).get();
+  if (!sale) return { ok: false, error: "venda não encontrada" };
+
+  const feeCents = feeFromBps(sale.grossCents, Math.round(feeBps));
+  const netCents = netOf(sale.grossCents, feeCents);
+  const liquidCents = marginOf(sale.grossCents, feeCents, totalCostCentsOf(db, saleId));
+  db.update(sales).set({ feeCents, netCents, liquidCents }).where(eq(sales.id, saleId)).run();
+
+  const row = listSales({ db }).find((candidate) => candidate.id === saleId);
+  if (!row) return { ok: false, error: "venda não encontrada após atualização" };
+  return { ok: true, value: { sale: row } };
 }

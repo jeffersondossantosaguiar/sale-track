@@ -1,7 +1,8 @@
-import { marginOf, netOf } from "@/lib/domain/cxmoney";
+import { feeFromBps, marginOf, netOf } from "@/lib/domain/cxmoney";
 import { type SQL, and, eq } from "drizzle-orm";
 import { type Db, getDb } from "../db/client";
 import { productCodes, products, saleItems, sales } from "../db/schema";
+import { getChannelFeeBps } from "../sales/service";
 import type { Channel } from "./channel";
 import { linkItems } from "./link";
 import type { ParsedInvoice } from "./parser";
@@ -70,7 +71,8 @@ export function importNfeToDb(
     .map(({ item }) => ({ cProd: item.cProd, description: item.description }));
 
   const totalCost = linked.reduce((sum, item) => sum + (item.frozenCostCents ?? 0), 0);
-  const feeCents = 0; // T040: taxa editável por venda (default = % do canal)
+  // US5/T040: taxa nasce com o % padrão configurado do canal (0 se não configurado)
+  const feeCents = feeFromBps(invoice.grossCents, getChannelFeeBps(channel, { db }));
   const netCents = netOf(invoice.grossCents, feeCents);
   const liquidCents = marginOf(invoice.grossCents, feeCents, totalCost);
 

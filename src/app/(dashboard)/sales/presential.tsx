@@ -2,16 +2,15 @@
 
 import { type PresentialState, createPresentialSaleFrom } from "@/app/actions/sales-presential";
 import type { ProductRow } from "@/lib/catalog/service";
-import { CASH_CATEGORY_LABELS } from "@/lib/domain/cash";
 import { formatBRL, parseBrlToCents } from "@/lib/domain/money";
-import type { SaleRow } from "@/lib/sales/service";
-import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 /**
  * T038 — Venda presencial (US4): lança venda à mão (catálogo rápido + busca),
- * valor recebido pré-sugerido pela soma dos itens e sempre editável. Já mostra
- * a lista de vendas (NF + presencial) e o faturamento do mês (US4.1/US4.2).
+ * valor recebido pré-sugerido pela soma dos itens e sempre editável. A taxa
+ * padrão do canal NASCE na venda importada; presencial não tem taxa (T040).
+ * A lista de vendas e as taxas vivem no TaxesPanel (T041).
  */
 
 type Line = { id: number; productId: string; quantity: string };
@@ -20,17 +19,15 @@ let lineSeq = 0;
 const blankLine = (): Line => ({ id: ++lineSeq, productId: "", quantity: "1" });
 
 export default function PresentialPanel({
-  initialSales,
   initialMonthTotal,
   initialMonth,
   products,
 }: {
-  initialSales: SaleRow[];
   initialMonthTotal: number;
   initialMonth: { year: number; month: number };
   products: ProductRow[];
 }) {
-  const [sales, setSales] = useState<SaleRow[]>(initialSales);
+  const router = useRouter();
   const [monthTotal, setMonthTotal] = useState(initialMonthTotal);
   const [month] = useState(initialMonth);
   const [date, setDate] = useState(todayIso());
@@ -86,12 +83,13 @@ export default function PresentialPanel({
       return;
     }
     setMessage(null);
-    setSales(result.data.sales);
     setMonthTotal(result.data.monthTotal);
     setLines([blankLine()]);
     setAmount("");
     setManualAmount(false);
     setSearch("");
+    // re-render dos painéis irmãos (taxas/lista) com os dados recém-criados
+    router.refresh();
   };
 
   const submit = () => {
@@ -115,17 +113,9 @@ export default function PresentialPanel({
 
   return (
     <section className="space-y-2">
-      <div className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2">
-        <div className="bg-card px-4 py-3">
-          <p className="text-xs uppercase text-muted-foreground">Faturamento {monthLabel}</p>
-          <p className="mt-1 text-lg font-semibold">{formatBRL(monthTotal)}</p>
-        </div>
-        <div className="bg-card px-4 py-3">
-          <p className="text-xs uppercase text-muted-foreground">Vendas no sistema</p>
-          <p className="mt-1 text-lg font-semibold">
-            {sales.length} {sales.length === 1 ? "venda" : "vendas"}
-          </p>
-        </div>
+      <div className="rounded-lg border bg-card px-4 py-3">
+        <p className="text-xs uppercase text-muted-foreground">Faturamento {monthLabel}</p>
+        <p className="mt-1 text-lg font-semibold">{formatBRL(monthTotal)}</p>
       </div>
 
       <div className="rounded-lg border bg-card p-4">
@@ -228,57 +218,6 @@ export default function PresentialPanel({
           {message && <p className="text-xs text-red-600">{message}</p>}
         </div>
       </div>
-
-      {sales.length > 0 && (
-        <div className="rounded-lg border bg-card">
-          <div className="max-h-96 overflow-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 bg-muted/60 text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2">Data</th>
-                  <th className="px-4 py-2">Canal</th>
-                  <th className="px-4 py-2">Itens</th>
-                  <th className="px-4 py-2 text-right">Bruto</th>
-                  <th className="px-4 py-2 text-right">Líquido</th>
-                  <th className="px-4 py-2 text-right">Margem</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {sales.map((sale) => (
-                  <tr key={sale.id}>
-                    <td className="px-4 py-2 whitespace-nowrap">{sale.saleDate.toISOString().slice(0, 10)}</td>
-                    <td className="px-4 py-2">
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-xs",
-                          sale.channel === "presencial"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-muted text-muted-foreground",
-                        )}
-                      >
-                        {sale.channel === "presencial" ? "Presencial" : sale.channel}
-                      </span>
-                      {sale.invoiceNumber && (
-                        <span className="ml-1 text-xs text-muted-foreground">· NF {sale.invoiceNumber}</span>
-                      )}
-                    </td>
-                    <td className="max-w-52 px-4 py-2 text-xs">
-                      <span className="line-clamp-1">{sale.firstItem ?? "—"}</span>
-                      {sale.itemCount > 1 && <span className="text-muted-foreground"> · {sale.itemCount} un</span>}
-                    </td>
-                    <td className="px-4 py-2 text-right whitespace-nowrap">{formatBRL(sale.grossCents)}</td>
-                    <td className="px-4 py-2 text-right whitespace-nowrap">{formatBRL(sale.netCents)}</td>
-                    <td className="px-4 py-2 text-right whitespace-nowrap text-xs">
-                      {formatBRL(sale.liquidCents)}
-                      <span className="ml-1 text-muted-foreground">· {CASH_CATEGORY_LABELS.venda}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

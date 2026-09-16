@@ -1,8 +1,11 @@
 import { listProducts } from "@/lib/catalog/service";
-import { listSales, monthlyGross } from "@/lib/sales/service";
+import { FEE_CHANNELS } from "@/lib/domain/fees";
+import { byChannelSummary, getChannelFeeBps, listSales, monthlyGross } from "@/lib/sales/service";
+import type { Channel } from "@/lib/xml/channel";
 import type { Metadata } from "next";
 import XmlImportForm from "./import-form";
 import PresentialPanel from "./presential";
+import TaxesPanel from "./taxes-panel";
 
 export const metadata: Metadata = {
   title: "Vendas · sale-track",
@@ -14,6 +17,10 @@ export default function SalesPage() {
   const now = new Date();
   const month = { year: now.getFullYear(), month: now.getMonth() + 1 };
   const monthTotal = monthlyGross(month);
+  const channelFees = Object.fromEntries(FEE_CHANNELS.map((channel) => [channel, getChannelFeeBps(channel)])) as Record<
+    Channel,
+    number
+  >;
   return (
     <div className="space-y-6">
       <div>
@@ -24,7 +31,8 @@ export default function SalesPage() {
         </p>
       </div>
       <XmlImportForm />
-      <PresentialPanel initialSales={sales} initialMonthTotal={monthTotal} initialMonth={month} products={products} />
+      <PresentialPanel initialMonthTotal={monthTotal} initialMonth={month} products={products} />
+      <TaxesPanel initialSales={sales} initialByChannel={byChannelSummary()} initialChannelFees={channelFees} />
     </div>
   );
 }
