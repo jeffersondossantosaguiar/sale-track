@@ -1,18 +1,22 @@
 import {
   createCategory,
   createProduct,
+  createVariant,
   deleteCategory,
   deleteProduct,
   listCategories,
   listProducts,
   listVariants,
   renameCategory,
+  repairTikTokLinks,
   setProductActive,
   updateProduct,
+  updateVariant,
 } from "@/lib/catalog/service";
 import type { Db } from "@/lib/db/client";
 import { categories, productCodes, products, saleItems, sales, variants } from "@/lib/db/schema";
 import { DEFAULT_CATEGORIES, categoryNameSchema, productInputSchema } from "@/lib/domain/catalog";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { setupTestDb } from "./helpers/db";
 
@@ -206,7 +210,171 @@ describe("catalog.service", () => {
       const variantId = defaultVariantId(db, p.value.id);
       db.insert(productCodes).values({ variantId, code: "S1", channel: "shopee" }).run();
       db.insert(productCodes).values({ variantId, code: "T1", channel: "tiktok" }).run();
-      expect(listVariants(p.value.id, { db })[0].accessoryCount).toBe(0);
+      const variant = listVariants(p.value.id, { db })[0];
+      expect(variant.accessoriesCents).toBe(0);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("consolida acessórios num único campo da variante, somado ao custo de produção", () => {
+    const { db, cleanup } = setupTestDb();
+    try {
+      const p = createProduct({ name: "Caneca", categoryId: null }, { db });
+      if (!p.ok) return;
+      const created = createVariant(
+        p.value.id,
+        {
+          sku: "CAN-2",
+          name: "Caneca 2",
+          printTimeMin: 0,
+          manualTimeMin: 0,
+          filamentMaterialId: null,
+          filamentGrams: 0,
+          packagingCents: 100,
+          accessoriesCents: 250,
+        },
+        { db },
+      );
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      const variantId = created.value.id;
+      const bySku = () => listVariants(p.value.id, { db }).find((v) => v.id === variantId);
+      expect(bySku()?.accessoriesCents).toBe(250);
+      expect(bySku()?.costCents).toBe(350); // embalagem 100 + acessórios 250
+      expect(updateVariant(variantId, { accessoriesCents: 500 }, { db }).ok).toBe(true);
+      expect(bySku()?.costCents).toBe(600); // embalagem 100 + acessórios 500
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("listProducts conta unidades vendidas por produto, ignorando reembolsos", () => {
+    const { db, cleanup } = setupTestDb();
+    try {
+      const p = createProduct({ name: "Mini Bulbasaur", categoryId: null }, { db });
+      if (!p.ok) return;
+      const variantId = defaultVariantId(db, p.value.id);
+      const sale1 = db
+        .insert(sales)
+        .values({
+          channel: "shopee",
+          saleDate: new Date(),
+          status: "normal",
+          grossCents: 10000,
+          freightCents: 0,
+          feeCents: 0,
+          netCents: 10000,
+          liquidCents: 0,
+        })
+        .run();
+      db.insert(saleItems)
+        .values({
+          saleId: Number(sale1.lastInsertRowid),
+          variantId,
+          cProd: "X",
+          description: "item",
+          quantity: 2,
+          unitPriceCents: 5000,
+        })
+        .run();
+      const sale2 = db
+        .insert(sales)
+        .values({
+          channel: "shopee",
+          saleDate: new Date(),
+          status: "refunded",
+          grossCents: 10000,
+          freightCents: 0,
+          feeCents: 0,
+          netCents: 10000,
+          liquidCents: 0,
+        })
+        .run();
+      db.insert(saleItems)
+        .values({
+          saleId: Number(sale2.lastInsertRowid),
+          variantId,
+          cProd: "X",
+          description: "item",
+          quantity: 5,
+          unitPriceCents: 5000,
+        })
+        .run();
+      const product = listProducts({ db })[0];
+      expect(product.salesCount).toBe(2);
+      expect(product.variantCount).toBe(1); // não infla com o join de sale_items
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("repara vínculos TikTok por descrição (desvincula contaminados, mantém corretos) e é idempotente", () => {
+    const { db, cleanup } = setupTestDb();
+    try {
+      const p = createProduct({ name: "Ash Greninja", categoryId: null }, { db });
+      if (!p.ok) return;
+      const variantId = defaultVariantId(db, p.value.id);
+      const ashDesc = "Ash Greninja Low Poly Pokemon | Enfeite Totem Decorativo Geek | Prateleira, Estante ou Mesa";
+      const luffyDesc = "Luffy Low Poly | One Piece | Decoracao para Prateleira, Estante ou Mesa";
+      const sale = db
+        .insert(sales)
+        .values({
+          channel: "tiktok",
+          saleDate: new Date(),
+          grossCents: 10000,
+          freightCents: 0,
+          feeCents: 0,
+          netCents: 10000,
+          liquidCents: 0,
+        })
+        .run();
+      const saleId = Number(sale.lastInsertRowid);
+      db.insert(saleItems)
+        .values([
+          {
+            saleId,
+            variantId,
+            cProd: "Padrao",
+            description: ashDesc,
+            quantity: 1,
+            unitPriceCents: 5000,
+            frozenCostCents: null,
+          },
+          {
+            saleId,
+            variantId,
+            cProd: "Padrao",
+            description: luffyDesc,
+            quantity: 1,
+            unitPriceCents: 5000,
+            frozenCostCents: null,
+          },
+        ])
+        .run();
+      db.insert(productCodes).values({ variantId, code: "Padrao", channel: "tiktok" }).run();
+
+      const res = repairTikTokLinks({ db });
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.value.unlinked).toBe(1);
+      expect(res.value.learned).toBe(1);
+
+      const luffy = db.select().from(saleItems).where(eq(saleItems.description, luffyDesc)).get();
+      expect(luffy?.variantId).toBeNull();
+      const ash = db.select().from(saleItems).where(eq(saleItems.description, ashDesc)).get();
+      expect(ash?.variantId).toBe(variantId);
+
+      const codes = db.select().from(productCodes).all();
+      expect(codes.some((c) => c.code === "Padrao" && c.channel === "tiktok")).toBe(false);
+      expect(codes.some((c) => c.code === ashDesc && c.channel === "tiktok")).toBe(true);
+
+      const res2 = repairTikTokLinks({ db });
+      expect(res2.ok).toBe(true);
+      if (res2.ok) {
+        expect(res2.value.unlinked).toBe(0);
+        expect(res2.value.learned).toBe(0);
+      }
     } finally {
       cleanup();
     }

@@ -74,6 +74,7 @@ export const variants = sqliteTable(
     filamentMaterialId: integer("filament_material_id").references(() => materials.id, { onDelete: "set null" }),
     filamentGrams: integer("filament_grams").notNull().default(0),
     packagingCents: integer("packaging_cents").notNull().default(0),
+    accessoriesCents: integer("accessories_cents").notNull().default(0),
     costCents: integer("cost_cents").notNull().default(0),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdAt: integer("created_at", { mode: "timestamp" })
@@ -95,7 +96,6 @@ export const variantRelations = relations(variants, ({ many, one }) => ({
   material: one(materials, { fields: [variants.filamentMaterialId], references: [materials.id] }),
   codes: many(productCodes),
   prices: many(variantPrices),
-  accessories: many(variantAccessories),
 }));
 
 /* ============================== Material ============================== */
@@ -113,28 +113,6 @@ export const materials = sqliteTable(
   },
   (t) => [index("materials_active_idx").on(t.active)],
 );
-
-/* ============================== VariantAccessory ============================== */
-
-export const variantAccessories = sqliteTable(
-  "variant_accessories",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    variantId: integer("variant_id")
-      .notNull()
-      .references(() => variants.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    costCents: integer("cost_cents").notNull().default(0),
-    createdAt: integer("created_at", { mode: "timestamp" })
-      .notNull()
-      .$defaultFn(() => new Date()),
-  },
-  (t) => [index("variant_accessories_variant_idx").on(t.variantId)],
-);
-
-export const variantAccessoryRelations = relations(variantAccessories, ({ one }) => ({
-  variant: one(variants, { fields: [variantAccessories.variantId], references: [variants.id] }),
-}));
 
 /* ============================== VariantPrice ============================== */
 

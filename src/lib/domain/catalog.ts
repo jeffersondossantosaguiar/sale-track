@@ -80,22 +80,11 @@ export const variantInputSchema = z.object({
   ),
   filamentGrams: z.coerce.number().int("peso deve ser inteiro (gramas)").min(0, "peso >= 0"),
   packagingCents: z.coerce.number().int("embalagem deve ser inteiro (centavos)").min(0, "embalagem >= 0"),
+  accessoriesCents: z.coerce.number().int("acessórios deve ser inteiro (centavos)").min(0, "acessórios >= 0"),
 });
 
 export type VariantInput = z.infer<typeof variantInputSchema>;
 export type VariantPatch = Partial<VariantInput>;
-
-/** Acessório somado ao custo da variante. */
-export const accessoryInputSchema = z.object({
-  name: z
-    .string()
-    .transform(normalizeName)
-    .refine((v) => v.length >= 1, "nome do acessório é obrigatório")
-    .refine((v) => v.length <= 80, "nome muito longo (máx. 80)"),
-  costCents: z.coerce.number().int("custo deve ser inteiro (centavos)").min(0, "custo >= 0"),
-});
-
-export type AccessoryInput = z.infer<typeof accessoryInputSchema>;
 
 /* ============================== Material ============================== */
 
@@ -169,7 +158,7 @@ export const productCodeInputSchema = z.object({
     .string()
     .transform(normalizeName)
     .refine((v) => v.length >= 1, "código obrigatório")
-    .refine((v) => v.length <= 60, "código muito longo (máx. 60)"),
+    .refine((v) => v.length <= 255, "código muito longo (máx. 255)"),
   channel: productCodeChannelSchema.default("geral"),
 });
 

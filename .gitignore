@@ -8,6 +8,8 @@ out/
 # Environment
 .env
 .env.local
+.env*.local
+.env.*
 
 # Local database (SQLite) and backups
 *.db
@@ -28,5 +30,12 @@ npm-debug.log*
 
 # OS
 .DS_Store
+Thumbs.db
 
+# Editors
 .vscode/
+.idea/
+
+# Temp files
+*.swp
+*.swo

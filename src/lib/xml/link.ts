@@ -1,9 +1,11 @@
 import type { Channel } from "./channel";
 
 /**
- * Vínculo cProd → variante via product_codes (US5).
- * Contrato: prefere código específico do canal; fallback para código "geral"
- * (channel null). Sem match → item sem vínculo (não bloqueia lote).
+ * Vínculo de item → variante via product_codes (US5, 006).
+ * Contrato: a CHAVE de vínculo depende do canal — TikTok casa pela DESCRIÇÃO
+ * (o cProd é genérico 'Padrao'); Shopee/presencial/geral casam por cProd.
+ * Prefere código específico do canal; fallback para "geral" (channel null).
+ * Sem match → item sem vínculo (não bloqueia lote).
  * Presencial não tem códigos de marketplace → só casa códigos "geral".
  */
 
@@ -27,25 +29,42 @@ function rank(channel: string | null): number {
   return channel === null ? 1 : 0;
 }
 
-/** Casa um cProd específico com o melhor código candidato para o canal. */
-export function linkCProd(cProd: string, channel: Channel, codes: CodeLookupRow[]): LinkedItem {
+/** Forma normalizada para casamento case-insensitive e tolerante a espaços. */
+export function normalizeMatch(value: string): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+/** Chave de vínculo do item conforme o canal: TikTok → descrição; demais → cProd. */
+export function itemMatchKey(channel: Channel, item: { cProd: string; description?: string }): string {
+  return channel === "tiktok" ? item.description?.trim() || item.cProd : item.cProd;
+}
+
+/** Casa uma chave (cProd ou descrição) com o melhor código candidato para o canal. */
+export function linkCProd(key: string, channel: Channel, codes: CodeLookupRow[]): LinkedItem {
   const candidates = codes
-    .filter((row) => row.code === cProd)
+    .filter((row) => normalizeMatch(row.code) === normalizeMatch(key))
     .filter(
       (row) => row.channel === null || row.channel === channel || (channel === "presencial" && row.channel === null),
     )
     .sort((a, b) => rank(a.channel) - rank(b.channel));
 
   const best = candidates[0];
-  if (!best) return { cProd, variantId: null, frozenCostCents: null };
+  if (!best) return { cProd: key, variantId: null, frozenCostCents: null };
   return {
-    cProd,
+    cProd: key,
     variantId: best.variant.id,
     frozenCostCents: best.variant.costCents, // congelado na venda (D6)
   };
 }
 
-/** Casa todos os itens de um pedido com os códigos disponíveis. */
-export function linkItems(items: Array<{ cProd: string }>, channel: Channel, codes: CodeLookupRow[]): LinkedItem[] {
-  return items.map((item) => linkCProd(item.cProd, channel, codes));
+/** Casa todos os itens de um pedido com os códigos disponíveis (chave por canal). */
+export function linkItems(
+  items: Array<{ cProd: string; description?: string }>,
+  channel: Channel,
+  codes: CodeLookupRow[],
+): LinkedItem[] {
+  return items.map((item) => {
+    const linked = linkCProd(itemMatchKey(channel, item), channel, codes);
+    return { cProd: item.cProd, variantId: linked.variantId, frozenCostCents: linked.frozenCostCents };
+  });
 }

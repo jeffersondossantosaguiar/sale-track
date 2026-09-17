@@ -2,7 +2,6 @@
 
 import { type ActionResult, actionData, actionError } from "@/lib/actions";
 import {
-  type AccessoryRow,
   type CategoryRow,
   type CostBreakdownRow,
   type MaterialRow,
@@ -12,7 +11,6 @@ import {
   type UnlinkedGroup,
   type VariantPriceRow,
   type VariantRow,
-  addAccessory,
   applyCurrentCostToUncosted as applyCurrentCostService,
   createCategory as createCategoryService,
   createMaterial as createMaterialService,
@@ -28,7 +26,6 @@ import {
   deleteVariant as deleteVariantService,
   getVariantCostBreakdown,
   linkUnlinkedToVariant as linkUnlinkedService,
-  listAccessories,
   listCategories,
   listChannelFeeTiers,
   listMaterials,
@@ -39,8 +36,8 @@ import {
   listVariantPrices,
   listVariants,
   recalcAllCosts,
-  removeAccessory,
   renameCategory as renameCategoryService,
+  repairTikTokLinks,
   saveChannelFeeTiers,
   setProductActive as setProductActiveService,
   setVariantActive as setVariantActiveService,
@@ -90,6 +87,7 @@ function variantForm(formData: FormData) {
     filamentMaterialId: parseOptionalId(formData.get("filamentMaterialId")),
     filamentGrams: Number(formData.get("filamentGrams") ?? 0),
     packagingCents: Number(formData.get("packagingCents") ?? 0),
+    accessoriesCents: Number(formData.get("accessoriesCents") ?? 0),
   };
 }
 
@@ -187,6 +185,7 @@ export async function updateVariant(formData: FormData): Promise<ActionResult<{ 
     patch.filamentMaterialId = parseOptionalId(formData.get("filamentMaterialId"));
   if (formData.has("filamentGrams")) patch.filamentGrams = Number(formData.get("filamentGrams"));
   if (formData.has("packagingCents")) patch.packagingCents = Number(formData.get("packagingCents"));
+  if (formData.has("accessoriesCents")) patch.accessoriesCents = Number(formData.get("accessoriesCents"));
   const result = updateVariantService(id, patch, { db });
   if (!result.ok) return actionError(result.error);
   revalidatePath("/products");
@@ -252,37 +251,6 @@ export async function deleteMaterial(formData: FormData): Promise<ActionResult<{
   revalidatePath("/settings/pricing");
   revalidatePath("/products");
   return actionData({ materials: listMaterials({ db }) });
-}
-
-/* ============================== Accessories ============================== */
-
-export async function getAccessories(formData: FormData): Promise<ActionResult<{ accessories: AccessoryRow[] }>> {
-  const db = getDb().db;
-  return actionData({ accessories: listAccessories(Number(formData.get("variantId")), { db }) });
-}
-
-export async function addAccessoryAction(formData: FormData): Promise<ActionResult<{ accessories: AccessoryRow[] }>> {
-  const db = getDb().db;
-  const variantId = Number(formData.get("variantId"));
-  const result = addAccessory(
-    variantId,
-    { name: String(formData.get("name") ?? ""), costCents: Number(formData.get("costCents") ?? 0) },
-    { db },
-  );
-  if (!result.ok) return actionError(result.error);
-  revalidatePath("/products");
-  return actionData({ accessories: listAccessories(variantId, { db }) });
-}
-
-export async function removeAccessoryAction(
-  formData: FormData,
-): Promise<ActionResult<{ accessories: AccessoryRow[] }>> {
-  const db = getDb().db;
-  const variantId = Number(formData.get("variantId"));
-  const result = removeAccessory(Number(formData.get("id")), { db });
-  if (!result.ok) return actionError(result.error);
-  revalidatePath("/products");
-  return actionData({ accessories: listAccessories(variantId, { db }) });
 }
 
 /* ============================== Variant Prices ============================== */
@@ -483,5 +451,21 @@ export async function applyCurrentCost(): Promise<
     groups: listUnlinkedGroups({ db }),
     products: listProducts({ db }),
     updated: result.value.updated,
+  });
+}
+
+/** Reparo de vínculos TikTok por descrição (006/US2) — ação explícita e idempotente. */
+export async function repairTikTokLinksAction(): Promise<
+  ActionResult<{ groups: UnlinkedGroup[]; products: ProductRow[]; unlinked: number; learned: number }>
+> {
+  const db = getDb().db;
+  const result = repairTikTokLinks({ db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({
+    groups: listUnlinkedGroups({ db }),
+    products: listProducts({ db }),
+    unlinked: result.value.unlinked,
+    learned: result.value.learned,
   });
 }

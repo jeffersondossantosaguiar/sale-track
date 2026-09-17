@@ -8,18 +8,15 @@ import {
   products,
   saleItems,
   sales,
-  variantAccessories,
   variantPrices,
   variants,
 } from "@/lib/db/schema";
 import {
-  type AccessoryInput,
   type MaterialInput,
   type PrinterInput,
   type ProductCodeInput,
   type ProductPatch,
   type VariantPatch,
-  accessoryInputSchema,
   categoryNameSchema,
   materialInputSchema,
   normalizeCategoryName,
@@ -39,7 +36,7 @@ import {
   globalEnergyPerHour,
   globalMachinePerHour,
 } from "@/lib/domain/printer";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getNumberSetting } from "../db/settings";
 
 /**
@@ -61,6 +58,7 @@ export type ProductRow = {
   marginBps: number;
   active: boolean;
   variantCount: number;
+  salesCount: number;
 };
 
 export type VariantRow = {
@@ -75,9 +73,9 @@ export type VariantRow = {
   materialPricePerKgCents: number | null;
   filamentGrams: number;
   packagingCents: number;
+  accessoriesCents: number;
   costCents: number;
   active: boolean;
-  accessoryCount: number;
 };
 
 export type VariantPriceRow = {
@@ -98,7 +96,6 @@ export type PrinterRow = {
   maintenanceCentsPerHour: number;
   active: boolean;
 };
-export type AccessoryRow = { id: number; variantId: number; name: string; costCents: number };
 
 const now = () => new Date();
 
@@ -189,11 +186,14 @@ export function listProducts(opts?: { db?: Db }): ProductRow[] {
       categoryName: categories.name,
       marginBps: products.marginBps,
       active: products.active,
-      variantCount: sql<number>`count(${variants.id})`,
+      variantCount: sql<number>`count(distinct ${variants.id})`,
+      salesCount: sql<number>`coalesce(sum(case when ${sales.status} != 'refunded' then ${saleItems.quantity} else 0 end), 0)`,
     })
     .from(products)
     .leftJoin(categories, eq(categories.id, products.categoryId))
     .leftJoin(variants, eq(variants.productId, products.id))
+    .leftJoin(saleItems, eq(saleItems.variantId, variants.id))
+    .leftJoin(sales, eq(sales.id, saleItems.saleId))
     .groupBy(products.id)
     .orderBy(products.name)
     .all();
@@ -241,6 +241,7 @@ export function createProduct(input: ProductPatch, opts?: { db?: Db }): ServiceR
           filamentMaterialId: null,
           filamentGrams: 0,
           packagingCents: 0,
+          accessoriesCents: 0,
           costCents: 0,
           active: true,
           createdAt: now(),
@@ -370,13 +371,12 @@ export function listVariants(productId: number, opts?: { db?: Db }): VariantRow[
       materialPricePerKgCents: materials.pricePerKgCents,
       filamentGrams: variants.filamentGrams,
       packagingCents: variants.packagingCents,
+      accessoriesCents: variants.accessoriesCents,
       costCents: variants.costCents,
       active: variants.active,
-      accessoryCount: sql<number>`count(${variantAccessories.id})`,
     })
     .from(variants)
     .leftJoin(materials, eq(materials.id, variants.filamentMaterialId))
-    .leftJoin(variantAccessories, eq(variantAccessories.variantId, variants.id))
     .where(eq(variants.productId, productId))
     .groupBy(variants.id)
     .orderBy(variants.name)
@@ -447,6 +447,7 @@ export function createVariant(
         filamentMaterialId: data.filamentMaterialId,
         filamentGrams: data.filamentGrams,
         packagingCents: data.packagingCents,
+        accessoriesCents: data.accessoriesCents,
         costCents: 0,
         active: true,
         createdAt: now(),
@@ -481,6 +482,7 @@ export function updateVariant(id: number, patch: VariantPatch, opts?: { db?: Db 
         ...(data.filamentMaterialId !== undefined ? { filamentMaterialId: data.filamentMaterialId } : {}),
         ...(data.filamentGrams !== undefined ? { filamentGrams: data.filamentGrams } : {}),
         ...(data.packagingCents !== undefined ? { packagingCents: data.packagingCents } : {}),
+        ...(data.accessoriesCents !== undefined ? { accessoriesCents: data.accessoriesCents } : {}),
         updatedAt: now(),
       })
       .where(eq(variants.id, id))
@@ -566,48 +568,6 @@ export function deleteMaterial(id: number, opts?: { db?: Db }): ServiceResult<{ 
     db.select({ n: sql<number>`count(*)` }).from(variants).where(eq(variants.filamentMaterialId, id)).get()?.n ?? 0;
   if (used > 0) return { ok: false, error: `material em uso por ${used} variante(s)` };
   db.delete(materials).where(eq(materials.id, id)).run();
-  return { ok: true, value: { id } };
-}
-
-/* ============================== Accessories ============================== */
-
-export function listAccessories(variantId: number, opts?: { db?: Db }): AccessoryRow[] {
-  const db = dbOf(opts);
-  return db
-    .select()
-    .from(variantAccessories)
-    .where(eq(variantAccessories.variantId, variantId))
-    .orderBy(variantAccessories.name)
-    .all();
-}
-
-export function addAccessory(
-  variantId: number,
-  input: AccessoryInput,
-  opts?: { db?: Db },
-): ServiceResult<{ id: number }> {
-  const db = dbOf(opts);
-  if (!variantExists(db, variantId)) return { ok: false, error: "variante não encontrada" };
-  const parsed = accessoryInputSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: zodMessage(parsed.error.issues) };
-  const inserted = db
-    .insert(variantAccessories)
-    .values({ variantId, ...parsed.data, createdAt: now() })
-    .run();
-  recomputeVariantCost(db, variantId);
-  return { ok: true, value: { id: Number(inserted.lastInsertRowid) } };
-}
-
-export function removeAccessory(id: number, opts?: { db?: Db }): ServiceResult<{ id: number }> {
-  const db = dbOf(opts);
-  const row = db
-    .select({ variantId: variantAccessories.variantId })
-    .from(variantAccessories)
-    .where(eq(variantAccessories.id, id))
-    .get();
-  if (!row) return { ok: false, error: "acessório não encontrado" };
-  db.delete(variantAccessories).where(eq(variantAccessories.id, id)).run();
-  recomputeVariantCost(db, row.variantId);
   return { ok: true, value: { id } };
 }
 
@@ -808,6 +768,7 @@ export function recomputeVariantCost(db: Db, variantId: number): number {
       manualTimeMin: variants.manualTimeMin,
       filamentGrams: variants.filamentGrams,
       packagingCents: variants.packagingCents,
+      accessoriesCents: variants.accessoriesCents,
       materialPricePerKgCents: materials.pricePerKgCents,
     })
     .from(variants)
@@ -815,12 +776,6 @@ export function recomputeVariantCost(db: Db, variantId: number): number {
     .where(eq(variants.id, variantId))
     .get();
   if (!v) return 0;
-  const accessories =
-    db
-      .select({ sum: sql<number>`coalesce(sum(${variantAccessories.costCents}),0)` })
-      .from(variantAccessories)
-      .where(eq(variantAccessories.variantId, variantId))
-      .get()?.sum ?? 0;
   const globalEnergy = globalEnergyPerHour(activePrinters(db), {
     kwhRateCents: getNumberSetting("kwh_rate_cents", 0, { db }),
     hoursPerWeek: getNumberSetting("hours_per_week", 0, { db }),
@@ -837,7 +792,7 @@ export function recomputeVariantCost(db: Db, variantId: number): number {
       filamentMaterialPricePerKgCents: v.materialPricePerKgCents,
       filamentGrams: v.filamentGrams,
       packagingCents: v.packagingCents,
-      accessoriesCents: accessories,
+      accessoriesCents: v.accessoriesCents,
     },
     globalEnergy,
     globalMachine,
@@ -869,6 +824,7 @@ export function getVariantCostBreakdown(db: Db, variantId: number): CostBreakdow
       manualTimeMin: variants.manualTimeMin,
       filamentGrams: variants.filamentGrams,
       packagingCents: variants.packagingCents,
+      accessoriesCents: variants.accessoriesCents,
       materialPricePerKgCents: materials.pricePerKgCents,
     })
     .from(variants)
@@ -885,12 +841,6 @@ export function getVariantCostBreakdown(db: Db, variantId: number): CostBreakdow
     totalCents: 0,
   };
   if (!v) return empty;
-  const accessories =
-    db
-      .select({ sum: sql<number>`coalesce(sum(${variantAccessories.costCents}),0)` })
-      .from(variantAccessories)
-      .where(eq(variantAccessories.variantId, variantId))
-      .get()?.sum ?? 0;
   const globalEnergy = globalEnergyPerHour(activePrinters(db), {
     kwhRateCents: getNumberSetting("kwh_rate_cents", 0, { db }),
     hoursPerWeek: getNumberSetting("hours_per_week", 0, { db }),
@@ -907,7 +857,7 @@ export function getVariantCostBreakdown(db: Db, variantId: number): CostBreakdow
       filamentMaterialPricePerKgCents: v.materialPricePerKgCents,
       filamentGrams: v.filamentGrams,
       packagingCents: v.packagingCents,
-      accessoriesCents: accessories,
+      accessoriesCents: v.accessoriesCents,
     },
     globalEnergy,
     globalMachine,
@@ -1030,14 +980,16 @@ export type UnlinkedGroup = {
   firstSaleDate: Date;
 };
 
-/** Fila "códigos sem vínculo": itens sem variante, agrupados por (cProd, canal). */
+/** Fila "códigos sem vínculo": itens sem variante, agrupados pela chave de vínculo
+ *  (cProd para Shopee/presencial; DESCRIÇÃO para TikTok — 006). */
 export function listUnlinkedGroups(opts?: { db?: Db }): UnlinkedGroup[] {
   const db = dbOf(opts);
+  const key = sql<string>`case when ${sales.channel} = 'tiktok' then ${saleItems.description} else ${saleItems.cProd} end`;
   return db
     .select({
-      cProd: saleItems.cProd,
+      cProd: key,
       channel: sales.channel,
-      description: saleItems.description,
+      description: sql<string>`max(${saleItems.description})`,
       count: sql<number>`count(*)`,
       totalCents: sql<number>`sum(${saleItems.quantity} * ${saleItems.unitPriceCents})`,
       firstSaleDate: sql<Date>`min(${sales.saleDate})`,
@@ -1045,14 +997,15 @@ export function listUnlinkedGroups(opts?: { db?: Db }): UnlinkedGroup[] {
     .from(saleItems)
     .innerJoin(sales, eq(saleItems.saleId, sales.id))
     .where(isNull(saleItems.variantId))
-    .groupBy(saleItems.cProd, sales.channel)
+    .groupBy(key, sales.channel)
     .orderBy(sql`min(${sales.saleDate}) desc`)
     .all();
 }
 
 /**
- * Vínculo manual da fila: aprende o código (product_codes → variante) para os
- * próximos imports e faz backfill de `variant_id` nos itens pendentes. NUNCA
+ * Vínculo manual da fila: aprende a CHAVE (cProd para Shopee/presencial;
+ * DESCRIÇÃO para TikTok — 006) → variante para os próximos imports e faz
+ * backfill de `variant_id` nos itens pendentes do mesmo canal e chave. NUNCA
  * mexe em `frozenCostCents` (D6) — custo segue congelado como foi gravado.
  */
 export function linkUnlinkedToVariant(
@@ -1061,7 +1014,8 @@ export function linkUnlinkedToVariant(
 ): ServiceResult<{ linked: number; learned: boolean }> {
   const db = dbOf(opts);
   if (!variantExists(db, input.variantId)) return { ok: false, error: "variante não encontrada" };
-  const code = normalizeName(input.cProd);
+  const isTiktok = input.channel === "tiktok";
+  const key = normalizeName(input.cProd);
   const channelForCode = input.channel === "shopee" || input.channel === "tiktok" ? input.channel : "geral";
   const channelValue = channelForCode === "geral" ? null : channelForCode;
 
@@ -1073,26 +1027,28 @@ export function linkUnlinkedToVariant(
       channel: productCodes.channel,
     })
     .from(productCodes)
-    .where(eq(sql`lower(${productCodes.code})`, code.toLowerCase()))
+    .where(eq(sql`lower(${productCodes.code})`, key.toLowerCase()))
     .all()
     .find((row) => (channelValue === null ? row.channel === null : row.channel === channelValue));
 
   let learned = false;
   if (existing) {
     if (existing.variantId !== input.variantId) {
-      return { ok: false, error: `código "${code}" já pertence a outra variante — confira a fila antes de vincular` };
+      return { ok: false, error: `código "${key}" já pertence a outra variante — confira a fila antes de vincular` };
     }
   } else {
-    const created = createProductCode(input.variantId, { code, channel: channelForCode }, { db });
+    const created = createProductCode(input.variantId, { code: key, channel: channelForCode }, { db });
     if (!created.ok) return created;
     learned = true;
   }
 
   const saleIds = db.select({ id: sales.id }).from(sales).where(eq(sales.channel, input.channel));
+  // Backfill casa a MESMA chave por canal: descrição (TikTok) ou cProd (demais).
+  const matchCol = isTiktok ? sql`lower(${saleItems.description})` : sql`lower(${saleItems.cProd})`;
   const updated = db
     .update(saleItems)
     .set({ variantId: input.variantId })
-    .where(and(isNull(saleItems.variantId), eq(saleItems.cProd, code), inArray(saleItems.saleId, saleIds)))
+    .where(and(isNull(saleItems.variantId), eq(matchCol, key.toLowerCase()), inArray(saleItems.saleId, saleIds)))
     .run();
 
   return { ok: true, value: { linked: Number(updated.changes), learned } };
@@ -1132,4 +1088,60 @@ export function applyCurrentCostToUncosted(opts?: { db?: Db }): ServiceResult<{ 
   }
 
   return { ok: true, value: { updated: rows.length } };
+}
+
+/**
+ * Reparo de vínculos TikTok (006): como o `cProd` do TikTok é o genérico
+ * 'Padrao', um vínculo aprendido puxou itens de OUTROS produtos. Esta ação
+ * explícita (US2):
+ *  1. Remove códigos aprendidos genéricos ('Padrao', 'tiktok').
+ *  2. Desvincula itens TikTok cujo produto vinculado NÃO está contido na
+ *     descrição — apenas os sem custo congelado (D6: nunca altera custo aplicado).
+ *  3. Aprende um código por DESCRIÇÃO para os itens mantidos (auto-vínculo futuro).
+ * Idempotente: na 2ª execução não há itens pendentes nem código 'Padrao'.
+ */
+export function repairTikTokLinks(opts?: { db?: Db }): ServiceResult<{ unlinked: number; learned: number }> {
+  const db = dbOf(opts);
+
+  db.delete(productCodes)
+    .where(and(eq(productCodes.code, "Padrao"), eq(productCodes.channel, "tiktok")))
+    .run();
+
+  const toUnlink = db
+    .select({ id: saleItems.id })
+    .from(saleItems)
+    .innerJoin(sales, eq(saleItems.saleId, sales.id))
+    .leftJoin(variants, eq(saleItems.variantId, variants.id))
+    .leftJoin(products, eq(products.id, variants.productId))
+    .where(
+      and(
+        eq(sales.channel, "tiktok"),
+        isNotNull(saleItems.variantId),
+        isNull(saleItems.frozenCostCents),
+        or(isNull(products.name), sql`instr(lower(${saleItems.description}), lower(${products.name})) = 0`),
+      ),
+    )
+    .all();
+  const unlinked = toUnlink.length;
+  for (const row of toUnlink) {
+    db.update(saleItems).set({ variantId: null, frozenCostCents: null }).where(eq(saleItems.id, row.id)).run();
+  }
+
+  const kept = db
+    .select({ variantId: saleItems.variantId, description: saleItems.description })
+    .from(saleItems)
+    .innerJoin(sales, eq(saleItems.saleId, sales.id))
+    .where(and(eq(sales.channel, "tiktok"), isNotNull(saleItems.variantId)))
+    .all();
+  let learned = 0;
+  const seen = new Set<string>();
+  for (const item of kept) {
+    const desc = item.description?.trim();
+    if (!desc || seen.has(desc) || item.variantId == null) continue;
+    seen.add(desc);
+    const created = createProductCode(item.variantId, { code: desc, channel: "tiktok" }, { db });
+    if (created.ok) learned++;
+  }
+
+  return { ok: true, value: { unlinked, learned } };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { applyCurrentCost, linkUnlinked } from "@/app/actions/catalog";
+import { applyCurrentCost, linkUnlinked, repairTikTokLinksAction } from "@/app/actions/catalog";
 import type { FlatVariantRow, UnlinkedGroup } from "@/lib/catalog/service";
 import { formatBRL } from "@/lib/domain/money";
 import { cn } from "@/lib/utils";
@@ -73,6 +73,25 @@ export default function UnlinkedPanel({
     });
   };
 
+  const submitRepairTikTok = () => {
+    if (!window.confirm("Reparar vínculos TikTok? Itens cuja descrição não corresponde ao produto voltam à fila."))
+      return;
+    startTransition(async () => {
+      const result = await repairTikTokLinksAction();
+      if (!result.ok) {
+        setMessage(result.error);
+        return;
+      }
+      setMessage(null);
+      setGroups(result.data.groups);
+      setInfo(
+        result.data.unlinked === 0
+          ? "Nenhum vínculo TikTok incorreto."
+          : `${result.data.unlinked} item(ns) TikTok desvinculado(s); ${result.data.learned} descrição(ões) aprendida(s).`,
+      );
+    });
+  };
+
   return (
     <section className="rounded-lg border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
@@ -83,6 +102,14 @@ export default function UnlinkedPanel({
             automaticamente.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={submitRepairTikTok}
+          disabled={pending}
+          className="rounded-md border px-3 py-1 text-xs text-muted-foreground disabled:opacity-50"
+        >
+          Reparar vínculos TikTok
+        </button>
         <button
           type="button"
           onClick={submitApplyCost}
@@ -102,14 +129,19 @@ export default function UnlinkedPanel({
           {groups.map((group) => (
             <li key={key(group)} className="flex flex-wrap items-center gap-3 px-4 py-2">
               <div className="min-w-36">
-                <span className="font-mono text-xs">{group.cProd}</span>
+                {group.channel === "tiktok" ? (
+                  <span className="text-xs font-medium">{group.description}</span>
+                ) : (
+                  <span className="font-mono text-xs">{group.cProd}</span>
+                )}
                 <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
                   {CHANNEL_LABELS[group.channel as Channel] ?? group.channel}
                 </span>
               </div>
-              <p className="line-clamp-1 flex-1 text-muted-foreground">
-                {group.description} · {group.count} {group.count === 1 ? "item" : "itens"} ·{" "}
-                {formatBRL(group.totalCents)}
+              <p title={group.description} className="line-clamp-1 flex-1 text-muted-foreground">
+                {group.channel === "tiktok"
+                  ? `${group.count} ${group.count === 1 ? "item" : "itens"} · ${formatBRL(group.totalCents)}`
+                  : `${group.description} · ${group.count} ${group.count === 1 ? "item" : "itens"} · ${formatBRL(group.totalCents)}`}
               </p>
               <select
                 value={picks[key(group)] ?? ""}

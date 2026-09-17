@@ -212,6 +212,7 @@ export default function ProductsPanel({
                 <th className="px-4 py-2">Produto</th>
                 <th className="px-4 py-2">Categoria</th>
                 <th className="px-4 py-2 text-right">Variantes</th>
+                <th className="px-4 py-2 text-right">Vendas</th>
                 <th className="px-4 py-2">Ativo</th>
                 <th className="px-4 py-2 text-right">Ações</th>
               </tr>
@@ -225,6 +226,7 @@ export default function ProductsPanel({
                     </td>
                     <td className="px-4 py-2 text-xs">{product.categoryName ?? "—"}</td>
                     <td className="px-4 py-2 text-right text-xs">{product.variantCount}</td>
+                    <td className="px-4 py-2 text-right text-xs">{product.salesCount}</td>
                     <td className="px-4 py-2 text-xs">{product.active ? "sim" : "não"}</td>
                     <td className="px-4 py-2 text-right">
                       <span className="flex items-center justify-end gap-1">
@@ -265,7 +267,7 @@ export default function ProductsPanel({
                   </tr>
                   {expanded === product.id && (
                     <tr key={`${product.id}-variants`}>
-                      <td colSpan={5} className="bg-muted/20 px-4 py-3">
+                      <td colSpan={6} className="bg-muted/20 px-4 py-3">
                         <VariantManager productId={product.id} materials={materials} />
                       </td>
                     </tr>
@@ -376,7 +378,8 @@ function VariantManager({ productId, materials }: { productId: number; materials
             </div>
             <div className="mt-2 text-xs text-muted-foreground">
               impressão {variant.printTimeMin}min · manual {variant.manualTimeMin}min · {variant.filamentGrams}g{" "}
-              {variant.materialName ?? "sem material"} · embalagem {formatBRL(variant.packagingCents)}
+              {variant.materialName ?? "sem material"} · embalagem {formatBRL(variant.packagingCents)} · acessórios{" "}
+              {formatBRL(variant.accessoriesCents)}
             </div>
           </li>
         ))}
@@ -426,6 +429,7 @@ function VariantEditorForm({
   const [materialId, setMaterialId] = useState(String(editing?.filamentMaterialId ?? ""));
   const [grams, setGrams] = useState(String(editing?.filamentGrams ?? "0"));
   const [packaging, setPackaging] = useState(toBRLInput(editing?.packagingCents ?? 0));
+  const [accessories, setAccessories] = useState(toBRLInput(editing?.accessoriesCents ?? 0));
   const [prices, setPrices] = useState<VariantPriceRow[]>([]);
   const [breakdown, setBreakdown] = useState<CostBreakdown | null>(null);
   const [tiers, setTiers] = useState<Record<"shopee" | "tiktok", ChannelFeeTier[]>>({ shopee: [], tiktok: [] });
@@ -462,6 +466,7 @@ function VariantEditorForm({
     form.set("filamentMaterialId", materialId);
     form.set("filamentGrams", grams);
     form.set("packagingCents", String(centsOf(packaging)));
+    form.set("accessoriesCents", String(centsOf(accessories)));
     startTransition(async () => {
       const r = await import("@/app/actions/catalog").then((m) =>
         editing ? m.updateVariant(form) : m.createVariant(form),
@@ -544,13 +549,22 @@ function VariantEditorForm({
             className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
           />
         </label>
+        <label className="block">
+          <span className="text-xs text-muted-foreground">Acessórios (R$)</span>
+          <input
+            value={accessories}
+            onChange={(e) => setAccessories(e.target.value)}
+            inputMode="decimal"
+            placeholder="0,00"
+            className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
+          />
+        </label>
       </div>
 
       {variantId !== 0 && <CostBreakdownBox breakdown={breakdown} />}
       {variantId !== 0 && (
         <PriceEditor variantId={variantId} initial={prices} costCents={editing?.costCents ?? 0} tiers={tiers} />
       )}
-      {variantId !== 0 && <AccessoriesEditor variantId={variantId} />}
       {variantId !== 0 && <CodesEditor variantId={variantId} />}
 
       <div className="flex items-center gap-2">
@@ -731,97 +745,6 @@ function ChannelPriceEditor({
   );
 }
 
-function AccessoriesEditor({ variantId }: { variantId: number }) {
-  const [accessories, setAccessories] = useState<Array<{ id: number; name: string; costCents: number }>>([]);
-  const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    const f = new FormData();
-    f.set("variantId", String(variantId));
-    void import("@/app/actions/catalog")
-      .then((m) => m.getAccessories(f))
-      .then((r) => {
-        if (active && r.ok) setAccessories(r.data.accessories);
-      });
-    return () => {
-      active = false;
-    };
-  }, [variantId]);
-
-  return (
-    <div className="rounded-md border bg-muted/20 p-2">
-      <span className="text-xs font-semibold text-muted-foreground">Acessórios (custo somado)</span>
-      {accessories.length === 0 && <p className="mt-1 text-xs text-muted-foreground">Nenhum acessório.</p>}
-      <ul className="mt-1 space-y-1">
-        {accessories.map((a) => (
-          <li key={a.id} className="flex items-center justify-between text-xs">
-            <span>
-              {a.name} · {formatBRL(a.costCents)}
-            </span>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                const f = new FormData();
-                f.set("variantId", String(variantId));
-                f.set("id", String(a.id));
-                startTransition(async () => {
-                  const r = await import("@/app/actions/catalog").then((m) => m.removeAccessoryAction(f));
-                  if (r.ok) setAccessories(r.data.accessories);
-                  else setMessage(r.error);
-                });
-              }}
-              className="text-red-600"
-            >
-              remover
-            </button>
-          </li>
-        ))}
-      </ul>
-      <form
-        className="mt-2 flex items-center gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const fd = new FormData(e.currentTarget);
-          fd.set("variantId", String(variantId));
-          startTransition(async () => {
-            const r = await import("@/app/actions/catalog").then((m) => m.addAccessoryAction(fd));
-            if (r.ok) setAccessories(r.data.accessories);
-            else setMessage(r.error);
-          });
-          (e.currentTarget.elements.namedItem("accName") as HTMLInputElement).value = "";
-          (e.currentTarget.elements.namedItem("accCost") as HTMLInputElement).value = "";
-        }}
-      >
-        <input
-          name="accName"
-          placeholder="ex.: argola"
-          required
-          maxLength={80}
-          className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 text-sm"
-        />
-        <input
-          name="accCost"
-          placeholder="R$"
-          inputMode="decimal"
-          required
-          className="w-20 rounded-md border bg-background px-2 py-1 text-sm"
-        />
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-md border px-2 py-1 text-xs text-muted-foreground disabled:opacity-50"
-        >
-          + acessório
-        </button>
-      </form>
-      {message && <p className="mt-1 text-xs text-red-600">{message}</p>}
-    </div>
-  );
-}
-
 function CodesEditor({ variantId }: { variantId: number }) {
   const [codes, setCodes] = useState<Array<{ id: number; code: string; channel: string | null }>>([]);
   const [pending, startTransition] = useTransition();
@@ -889,7 +812,7 @@ function CodesEditor({ variantId }: { variantId: number }) {
           name="code"
           placeholder="código"
           required
-          maxLength={60}
+          maxLength={255}
           className="rounded-md border bg-background px-2 py-1 text-sm"
         />
         <select name="channel" className="rounded-md border bg-background px-2 py-1 text-sm">

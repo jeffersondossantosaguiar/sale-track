@@ -84,9 +84,68 @@ describe("unlinked queue (T031)", () => {
       expect(a1?.channel).toBe("shopee");
       expect(a1?.count).toBe(2);
       expect(a1?.totalCents).toBe(1_980);
-      expect(groups.find((g) => g.cProd === "B2")?.channel).toBe("tiktok");
+      const tiktokGroup = groups.find((g) => g.channel === "tiktok");
+      expect(tiktokGroup?.cProd).toBe("Caneca B"); // TikTok agrupa por descrição
       expect(groups.some((g) => g.cProd === "LIG")).toBe(false);
       expect(groups).toHaveLength(2);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("agrupa TikTok por descrição (não colapsa no cProd 'Padrao')", () => {
+    const { db, cleanup } = setupTestDb();
+    try {
+      insertSale(db, "tiktok", [{ cProd: "Padrao", desc: "Ash Greninja Low Poly", price: 1000 }]);
+      insertSale(db, "tiktok", [{ cProd: "Padrao", desc: "Luffy Low Poly", price: 1000 }]);
+      insertSale(db, "tiktok", [{ cProd: "Padrao", desc: "Ash Greninja Low Poly", price: 1000 }]);
+      const groups = listUnlinkedGroups({ db });
+      expect(groups).toHaveLength(2);
+      const ash = groups.find((g) => g.cProd === "Ash Greninja Low Poly");
+      expect(ash?.channel).toBe("tiktok");
+      expect(ash?.count).toBe(2);
+      expect(groups.find((g) => g.cProd === "Luffy Low Poly")?.count).toBe(1);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("vínculo TikTok por descrição faz backfill só da descrição certa", () => {
+    const { db, cleanup } = setupTestDb();
+    try {
+      const variantId = makeVariant(db, "Ash Greninja");
+      insertSale(db, "tiktok", [{ cProd: "Padrao", desc: "Ash Greninja Low Poly", price: 1000 }]);
+      insertSale(db, "tiktok", [{ cProd: "Padrao", desc: "Luffy Low Poly", price: 1000 }]);
+
+      const res = linkUnlinkedToVariant({ variantId, cProd: "Ash Greninja Low Poly", channel: "tiktok" }, { db });
+      expect(res.ok).toBe(true);
+      if (res.ok) expect(res.value.linked).toBe(1);
+
+      const rows = db.select({ desc: saleItems.description, variantId: saleItems.variantId }).from(saleItems).all();
+      const ash = rows.find((r) => r.desc === "Ash Greninja Low Poly");
+      const luffy = rows.find((r) => r.desc === "Luffy Low Poly");
+      expect(ash?.variantId).toBe(variantId);
+      expect(luffy?.variantId).toBeNull();
+
+      const codes = listProductCodes(variantId, { db });
+      expect(codes.some((c) => c.code === "Ash Greninja Low Poly" && c.channel === "tiktok")).toBe(true);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("novo import TikTok casa automaticamente por descrição aprendida", () => {
+    const { db, cleanup } = setupTestDb();
+    try {
+      const variantId = makeVariant(db, "Ash Greninja");
+      insertSale(db, "tiktok", [{ cProd: "Padrao", desc: "Ash Greninja Low Poly", price: 1000 }]);
+      const link = linkUnlinkedToVariant({ variantId, cProd: "Ash Greninja Low Poly", channel: "tiktok" }, { db });
+      expect(link.ok).toBe(true);
+
+      const codes = listProductCodes(variantId, { db });
+      const lookup = codes.map((c) => ({ code: c.code, channel: c.channel, variant: { id: variantId, costCents: 0 } }));
+      const linked = linkCProd("Ash Greninja Low Poly", "tiktok", lookup);
+      expect(linked.variantId).toBe(variantId);
     } finally {
       cleanup();
     }
