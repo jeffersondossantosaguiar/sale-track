@@ -1,5 +1,6 @@
 "use client";
 
+import { CalendarDays } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -18,21 +19,22 @@ export default function MonthPicker({ value }: { value: string }) {
         event.preventDefault();
         if (draft) router.push(`/?m=${draft}`);
       }}
-      className="flex items-center gap-2 text-sm"
+      className="inline-flex items-center gap-2 rounded-full border bg-card py-1.5 pl-3 pr-1.5 shadow-sm focus-within:ring-1 focus-within:ring-primary"
     >
       <label className="sr-only" htmlFor="dashboard-month">
         Mês exibido
       </label>
+      <CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       <input
         id="dashboard-month"
         type="month"
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
-        className="h-10 rounded-full border bg-card px-4 text-sm shadow-sm"
+        className="bg-transparent text-sm text-foreground outline-none [&::-webkit-calendar-picker-indicator]:opacity-60"
       />
       <button
         type="submit"
-        className="h-10 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        className="rounded-full bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
         Ver
       </button>
