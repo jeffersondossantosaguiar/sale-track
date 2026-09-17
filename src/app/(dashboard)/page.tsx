@@ -1,37 +1,17 @@
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import DashboardMetrics from "@/components/dashboard/DashboardMetrics";
-import ExpensesByCategory from "@/components/dashboard/ExpensesByCategory";
+import ExpensesByCategory, { type ExpenseCategoryRow } from "@/components/dashboard/ExpensesByCategory";
 import MeiLimitCard from "@/components/dashboard/MeiLimitCard";
 import SalesByChannel from "@/components/dashboard/SalesByChannel";
+import { friendlyMonth } from "@/components/dashboard/monthLabel";
 import { buildDashboardStats, monthFromParam, monthToParam } from "@/lib/dashboard/service";
 import { CASH_CATEGORY_LABELS } from "@/lib/domain/cash";
-import type { FiscalMonth } from "@/lib/sales/service";
 import type { Metadata } from "next";
 import MonthPicker from "./month-picker";
 
 export const metadata: Metadata = {
   title: "Dashboard · sale-track",
 };
-
-const MONTH_NAMES = [
-  "janeiro",
-  "fevereiro",
-  "março",
-  "abril",
-  "maio",
-  "junho",
-  "julho",
-  "agosto",
-  "setembro",
-  "outubro",
-  "novembro",
-  "dezembro",
-];
-
-function friendlyMonth(month: FiscalMonth): string {
-  const name = MONTH_NAMES[month.month - 1] ?? String(month.month);
-  return `${name} de ${month.year}`;
-}
 
 export default async function DashboardPage({
   searchParams,
@@ -45,7 +25,7 @@ export default async function DashboardPage({
   const pct = Math.min(stats.meiUsedBps / 100, 100);
   const over = stats.meiUsedBps > 10_000;
 
-  const gastos = Object.entries(stats.cash.byCategory)
+  const gastos: ExpenseCategoryRow[] = Object.entries(stats.cash.byCategory)
     .filter(([, amount]) => amount < 0)
     .sort((a, b) => a[1] - b[1])
     .map(([category, amount]) => ({
