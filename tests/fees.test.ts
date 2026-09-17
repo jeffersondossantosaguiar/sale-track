@@ -1,10 +1,10 @@
 import { createProduct, createProductCode, listVariants } from "@/lib/catalog/service";
 import type { Db } from "@/lib/db/client";
-import { variants } from "@/lib/db/schema";
+import { sales, variants } from "@/lib/db/schema";
 import { getNumberSetting, setNumberSetting } from "@/lib/db/settings";
 import { feeFromBps, marginOf, netOf } from "@/lib/domain/cxmoney";
-import { percentToBps } from "@/lib/domain/fees";
-import { byChannelSummary, getChannelFeeBps, setSaleFee } from "@/lib/sales/service";
+import { parseFeeTiersText, percentToBps } from "@/lib/domain/fees";
+import { byChannelSummary, getChannelFeeBps, setReceived, setSaleFee } from "@/lib/sales/service";
 import { importNfeToDb } from "@/lib/xml/importer";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -59,6 +59,23 @@ describe("fees.domain — percentual → bps (004/US3)", () => {
   });
 });
 
+describe("fees.domain — parse de faixas de texto (005/US2)", () => {
+  it("converte regras do editor em faixas ordenadas em centavos/bps", () => {
+    const tiers = parseFeeTiersText("<= 79,99 = 20% + 4\n80,00 - 99,99 = 14% + 4\n>= 500,00 = 14% + 26");
+    expect(tiers).toEqual([
+      { minCents: 0, maxCents: 7999, commissionBps: 2000, fixedCents: 400 },
+      { minCents: 8000, maxCents: 9999, commissionBps: 1400, fixedCents: 400 },
+      { minCents: 50000, maxCents: null, commissionBps: 1400, fixedCents: 2600 },
+    ]);
+  });
+
+  it("rejeita formato inválido, faixa invertida e sobreposição", () => {
+    expect(() => parseFeeTiersText("79,99 = 20% + 4")).toThrow(/faixa inválida/i);
+    expect(() => parseFeeTiersText("<= 99,99 = 10% + 1\n>= 50,00 = 20% + 4")).toThrow(/sobrep/i);
+    expect(() => parseFeeTiersText("")).toThrow(/ao menos uma faixa/i);
+  });
+});
+
 describe("service sales — taxas por venda (T040)", () => {
   it("setSaleFee recalcula taxa/líquido/margem sem mutar o bruto do faturamento", () => {
     const { db, cleanup } = setupTestDb();
@@ -104,31 +121,62 @@ describe("service sales — taxas por venda (T040)", () => {
     }
   });
 
-  it("importação pré-preenche taxa com o % padrão configurado do canal (cenário US5.1)", () => {
+  it("importação NÃO pré-preenche taxa (005): recebido pendente → lucro pendente", () => {
     const { db, cleanup } = setupTestDb();
     try {
       const variantId = mkVariant(db, "Busto Eiffel", 4_000);
       const code = createProductCode(variantId, { code: "X1", channel: "shopee" }, { db });
       expect(code.ok).toBe(true);
 
+      // Mesmo com % de canal configurado, a taxa não é pré-preenchida (a verdade é o recebido).
       setNumberSetting("channel_fee_bps_shopee", 1200, { db });
       const importado = importNf(db, "000202", "X1", 10_000, "shopee");
       expect(importado.ok).toBe(true);
-      const configurado = byChannelSummary({ db }).find((row) => row.channel === "shopee");
-      expect(configurado?.feeCents).toBe(feeFromBps(10_000, 1200));
-      expect(configurado?.netCents).toBe(netOf(10_000, 1_200));
+      if (!importado.ok) return;
 
-      // sem configurar (ou 0), a taxa nasce 0
-      setNumberSetting("channel_fee_bps_shopee", 0, { db });
-      const semTaxa = importNf(db, "000203", "X1", 10_000, "shopee");
-      expect(semTaxa.ok).toBe(true);
-      expect(getNumberSetting("channel_fee_bps_shopee", 0, { db })).toBe(0);
+      const imported = db.select().from(sales).where(eq(sales.id, importado.saleId)).get();
+      expect(imported?.receivedCents).toBeNull();
+      expect(imported?.feeCents).toBe(0);
+      expect(imported?.liquidCents).toBe(0);
+      expect(imported?.netCents).toBe(10_000);
     } finally {
       cleanup();
     }
   });
 
-  it("resumo por canal: bruto, total de taxas e líquido (cenário US5.3)", () => {
+  it("setReceived deriva taxa/líquido/lucro a partir do recebido (005)", () => {
+    const { db, cleanup } = setupTestDb();
+    try {
+      const variantId = mkVariant(db, "Busto Eiffel", 4_000);
+      const code = createProductCode(variantId, { code: "X1", channel: "shopee" }, { db });
+      expect(code.ok).toBe(true);
+      const imported = importNf(db, "000204", "X1", 10_000, "shopee");
+      expect(imported.ok).toBe(true);
+      if (!imported.ok) return;
+
+      const result = setReceived(imported.saleId, 8_800, { db });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const sale = result.value.sale;
+      expect(sale.grossCents).toBe(10_000); // faturamento imutável
+      expect(sale.receivedCents).toBe(8_800);
+      expect(sale.feeCents).toBe(1_200); // = (bruto − frete) − recebido
+      expect(sale.netCents).toBe(8_800);
+      expect(sale.liquidCents).toBe(8_800 - 4_000); // lucro = recebido − custo
+
+      // Limpar recebido → volta a pendente.
+      const cleared = setReceived(imported.saleId, null, { db });
+      expect(cleared.ok).toBe(true);
+      if (!cleared.ok) return;
+      expect(cleared.value.sale.receivedCents).toBeNull();
+      expect(cleared.value.sale.liquidCents).toBe(0);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("resumo por canal: bruto, taxas derivadas e líquido (cenário US5.3)", () => {
     const { db, cleanup } = setupTestDb();
     try {
       const variantId = mkVariant(db, "Busto Eiffel", 4_000);
@@ -136,9 +184,15 @@ describe("service sales — taxas por venda (T040)", () => {
       const tiktokCode = createProductCode(variantId, { code: "X2", channel: "tiktok" }, { db });
       expect(shopeeCode.ok && tiktokCode.ok).toBe(true);
 
-      setNumberSetting("channel_fee_bps_shopee", 1200, { db });
-      expect(importNf(db, "000204", "X1", 10_000, "shopee").ok).toBe(true);
-      expect(importNf(db, "000205", "X2", 5_000, "tiktok").ok).toBe(true);
+      const shopeeSale = importNf(db, "000204", "X1", 10_000, "shopee");
+      expect(shopeeSale.ok).toBe(true);
+      const tiktokSale = importNf(db, "000205", "X2", 5_000, "tiktok");
+      expect(tiktokSale.ok).toBe(true);
+      if (!shopeeSale.ok || !tiktokSale.ok) return;
+
+      // Informa os recebidos → taxas derivadas.
+      expect(setReceived(shopeeSale.saleId, 8_800, { db }).ok).toBe(true);
+      expect(setReceived(tiktokSale.saleId, 5_000, { db }).ok).toBe(true);
 
       const summary = byChannelSummary({ db });
       const shopee = summary.find((row) => row.channel === "shopee");

@@ -2,65 +2,52 @@
 
 import { type ActionResult, actionData, actionError } from "@/lib/actions";
 import { getDb } from "@/lib/db/client";
-import { getNumberSetting, setNumberSetting } from "@/lib/db/settings";
-import { FEE_CHANNELS, channelFeeFixedSettingKey, channelFeeSettingKey, percentToBps } from "@/lib/domain/fees";
 import {
   type ChannelSummaryRow,
   type SaleRow,
   byChannelSummary,
-  getChannelFeeBps,
   listSales,
   reverseSale,
+  setReceived,
   setSaleFee,
 } from "@/lib/sales/service";
-import type { Channel } from "@/lib/xml/channel";
 import { revalidatePath } from "next/cache";
 
 /**
- * Server Actions de TAXAS (US5/T039) — default do canal (settings, % configurável)
- * e taxa por venda (editável). Servidor = fonte da verdade: retorna a lista de
- * vendas, o resumo por canal e os percentuais configurados.
+ * Server Actions de Vendas/Taxas (005) — apuração por RECEBIDO (fonte da verdade).
+ * Servidor = fonte da verdade: retorna a lista de vendas e o resumo por canal.
+ * O antigo "setChannelFeeFrom" (taxa % + fixa por canal) foi removido — a taxa agora
+ * é derivada (produto − recebido) e a precificação usa a tabela de faixas.
  */
 
 export type FeesState = {
   sales: SaleRow[];
   byChannel: ChannelSummaryRow[];
-  channelFees: Record<Channel, number>;
-  channelFixedFees: Record<Channel, number>;
 };
 
 async function feesState(): Promise<ActionResult<FeesState>> {
   const db = getDb().db;
-  const channelFees = Object.fromEntries(
-    FEE_CHANNELS.map((channel) => [channel, getChannelFeeBps(channel, { db })]),
-  ) as Record<Channel, number>;
-  const channelFixedFees = Object.fromEntries(
-    FEE_CHANNELS.map((channel) => [channel, getNumberSetting(channelFeeFixedSettingKey(channel), 0, { db })]),
-  ) as Record<Channel, number>;
-  return actionData({ sales: listSales({ db }), byChannel: byChannelSummary({ db }), channelFees, channelFixedFees });
+  return actionData({ sales: listSales({ db }), byChannel: byChannelSummary({ db }) });
 }
 
-/** Edita a taxa de uma venda específica (cenário US5.2). */
+/** Define o RECEBIDO de uma venda (005) — fonte da verdade do lucro. */
+export async function setReceivedFrom(formData: FormData): Promise<ActionResult<FeesState>> {
+  const db = getDb().db;
+  const raw = String(formData.get("receivedCents") ?? "").trim();
+  const receivedCents = raw === "" ? null : Number(raw);
+  const result = setReceived(Number(formData.get("id")), receivedCents, { db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/sales");
+  revalidatePath("/");
+  return feesState();
+}
+
+/** Ajusta a taxa de uma venda (legado, T040). Mantido para compatibilidade; na apuração por recebido a taxa é derivada. */
 export async function setSaleFeeFrom(formData: FormData): Promise<ActionResult<FeesState>> {
   const db = getDb().db;
   const result = setSaleFee(Number(formData.get("id")), Number(formData.get("bps")), { db });
   if (!result.ok) return actionError(result.error);
   revalidatePath("/sales");
-  return feesState();
-}
-
-/** Configura a % padrão e a taxa fixa de um canal (002/FR-013). */
-export async function setChannelFeeFrom(formData: FormData): Promise<ActionResult<FeesState>> {
-  const db = getDb().db;
-  const channel = String(formData.get("channel")) as Channel;
-  // O painel envia o PERCENTUAL (ex.: 20 = 20%); grava como basis points (×100).
-  const percent = Number(formData.get("bps")) || 0;
-  const bps = percentToBps(percent);
-  setNumberSetting(channelFeeSettingKey(channel), bps, { db });
-  const fixed = Number(formData.get("fixedCents")) || 0;
-  setNumberSetting(channelFeeFixedSettingKey(channel), Math.max(0, Math.round(fixed)), { db });
-  revalidatePath("/sales");
-  revalidatePath("/settings/sales-channels");
   return feesState();
 }
 

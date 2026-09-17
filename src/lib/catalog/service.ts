@@ -1,6 +1,7 @@
 import { type Db, getDb } from "@/lib/db/client";
 import {
   categories,
+  channelFeeTiers,
   materials,
   printers,
   productCodes,
@@ -31,7 +32,8 @@ import {
   variantPriceInputSchema,
 } from "@/lib/domain/catalog";
 import { computeVariantCost } from "@/lib/domain/cost";
-import { computeSuggestedPriceCents } from "@/lib/domain/pricing";
+import { parseFeeTiersText } from "@/lib/domain/fees";
+import { type ChannelFeeTier, computeSuggestedPriceCentsByTiers } from "@/lib/domain/pricing";
 import {
   type PrinterInput as PrinterDomainInput,
   globalEnergyPerHour,
@@ -56,6 +58,7 @@ export type ProductRow = {
   name: string;
   categoryId: number | null;
   categoryName: string | null;
+  marginBps: number;
   active: boolean;
   variantCount: number;
 };
@@ -81,7 +84,6 @@ export type VariantPriceRow = {
   id: number;
   variantId: number;
   channel: string;
-  marginBps: number;
   suggestedPriceCents: number;
   practicedPriceCents: number;
 };
@@ -185,6 +187,7 @@ export function listProducts(opts?: { db?: Db }): ProductRow[] {
       name: products.name,
       categoryId: products.categoryId,
       categoryName: categories.name,
+      marginBps: products.marginBps,
       active: products.active,
       variantCount: sql<number>`count(${variants.id})`,
     })
@@ -219,6 +222,7 @@ export function createProduct(input: ProductPatch, opts?: { db?: Db }): ServiceR
         .values({
           name: data.name,
           categoryId: data.categoryId ?? null,
+          marginBps: data.marginBps ?? 3500,
           active: true,
           createdAt: now(),
           updatedAt: now(),
@@ -268,10 +272,11 @@ function ensureVariantPrices(db: Db, variantId: number): void {
     if (existing) continue;
     const cost =
       db.select({ cost: variants.costCents }).from(variants).where(eq(variants.id, variantId)).get()?.cost ?? 0;
-    const fee = channelFee(db, channel);
+    const tiers = channelFeeTiersOf(db, channel);
+    const marginBps = variantMarginBps(db, variantId);
     let suggested = cost;
     try {
-      suggested = computeSuggestedPriceCents(cost, 0, fee);
+      suggested = computeSuggestedPriceCentsByTiers(cost, marginBps, tiers);
     } catch {
       suggested = cost;
     }
@@ -279,7 +284,6 @@ function ensureVariantPrices(db: Db, variantId: number): void {
       .values({
         variantId,
         channel,
-        marginBps: 0,
         suggestedPriceCents: suggested,
         practicedPriceCents: suggested,
         createdAt: now(),
@@ -314,10 +318,15 @@ export function updateProduct(id: number, patch: ProductPatch, opts?: { db?: Db 
     .set({
       ...(data.name !== undefined ? { name: data.name } : {}),
       ...(data.categoryId !== undefined ? { categoryId: data.categoryId ?? null } : {}),
+      ...(data.marginBps !== undefined ? { marginBps: data.marginBps } : {}),
       updatedAt: now(),
     })
     .where(eq(products.id, id))
     .run();
+  if (data.marginBps !== undefined) {
+    const variantIds = db.select({ id: variants.id }).from(variants).where(eq(variants.productId, id)).all();
+    for (const v of variantIds) recomputeSuggested(db, v.id);
+  }
   return { ok: true, value: { id } };
 }
 
@@ -615,15 +624,14 @@ export function listVariantPrices(variantId: number, opts?: { db?: Db }): Varian
 }
 
 /**
- * Define a margem E/OU o preço praticado de uma variante × canal. Recalcula o
- * preço sugerido, mas NUNCA sobrescreve o praticado (FR-011) — a menos que seja
- * criação (default = sugerido).
+ * Define o preço praticado de uma variante × canal. Recalcula o preço sugerido
+ * usando a margem do PRODUTO + faixas de taxa do canal, mas NUNCA sobrescreve o
+ * praticado (FR-011) — a menos que seja criação (default = sugerido).
  */
 export function upsertVariantPrice(
   variantId: number,
   input: {
     channel: "shopee" | "tiktok";
-    marginBps?: number;
     practicedPriceCents?: number;
     setPracticedToSuggested?: boolean;
   },
@@ -634,7 +642,6 @@ export function upsertVariantPrice(
   const existing = db
     .select({
       id: variantPrices.id,
-      marginBps: variantPrices.marginBps,
       suggestedPriceCents: variantPrices.suggestedPriceCents,
       practicedPriceCents: variantPrices.practicedPriceCents,
     })
@@ -644,11 +651,11 @@ export function upsertVariantPrice(
 
   const costCents =
     db.select({ cost: variants.costCents }).from(variants).where(eq(variants.id, variantId)).get()?.cost ?? 0;
-  const fee = channelFee(db, input.channel);
-  const marginBps = input.marginBps ?? existing?.marginBps ?? 0;
+  const tiers = channelFeeTiersOf(db, input.channel);
+  const marginBps = variantMarginBps(db, variantId);
   let suggested: number;
   try {
-    suggested = computeSuggestedPriceCents(costCents, marginBps, fee);
+    suggested = computeSuggestedPriceCentsByTiers(costCents, marginBps, tiers);
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -659,7 +666,7 @@ export function upsertVariantPrice(
   try {
     if (existing) {
       db.update(variantPrices)
-        .set({ marginBps, suggestedPriceCents: suggested, practicedPriceCents: practiced, updatedAt: now() })
+        .set({ suggestedPriceCents: suggested, practicedPriceCents: practiced, updatedAt: now() })
         .where(eq(variantPrices.id, existing.id))
         .run();
       return { ok: true, value: { id: existing.id } };
@@ -669,7 +676,6 @@ export function upsertVariantPrice(
       .values({
         variantId,
         channel: input.channel,
-        marginBps,
         suggestedPriceCents: suggested,
         practicedPriceCents: practiced,
         createdAt: now(),
@@ -682,12 +688,67 @@ export function upsertVariantPrice(
   }
 }
 
-/** Taxa fixa + percentual de um canal (settings). */
-function channelFee(db: Db, channel: string): { feeFixedCents: number; feeRateBps: number } {
-  return {
-    feeFixedCents: getNumberSetting(`channel_fee_fixed_cents_${channel}`, 0, { db }),
-    feeRateBps: getNumberSetting(`channel_fee_bps_${channel}`, 0, { db }),
-  };
+/** Faixas de taxa de um canal (channel_fee_tiers), ordenadas por min. */
+function channelFeeTiersOf(db: Db, channel: string): ChannelFeeTier[] {
+  return db
+    .select({
+      minCents: channelFeeTiers.minCents,
+      maxCents: channelFeeTiers.maxCents,
+      commissionBps: channelFeeTiers.commissionBps,
+      fixedCents: channelFeeTiers.fixedCents,
+    })
+    .from(channelFeeTiers)
+    .where(eq(channelFeeTiers.channel, channel))
+    .orderBy(channelFeeTiers.minCents)
+    .all();
+}
+
+/** Margem unificada do PRODUTO dono da variante (005). */
+function variantMarginBps(db: Db, variantId: number): number {
+  const row = db
+    .select({ marginBps: products.marginBps })
+    .from(variants)
+    .innerJoin(products, eq(products.id, variants.productId))
+    .where(eq(variants.id, variantId))
+    .get();
+  return row?.marginBps ?? 3500;
+}
+
+/* ============================== Channel Fee Tiers ============================== */
+
+/** Faixas de taxa de um canal (para o editor). */
+export function listChannelFeeTiers(channel: string, opts?: { db?: Db }): ChannelFeeTier[] {
+  return channelFeeTiersOf(dbOf(opts), channel);
+}
+
+/** Salva as faixas de um canal (substitui o conjunto) e recalcula os sugeridos. */
+export function saveChannelFeeTiers(
+  channel: "shopee" | "tiktok",
+  text: string,
+  opts?: { db?: Db },
+): ServiceResult<{ tiers: ChannelFeeTier[] }> {
+  const db = dbOf(opts);
+  let tiers: ChannelFeeTier[];
+  try {
+    tiers = parseFeeTiersText(text);
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+  const nowDate = now();
+  db.delete(channelFeeTiers).where(eq(channelFeeTiers.channel, channel)).run();
+  for (const tier of tiers) {
+    db.insert(channelFeeTiers)
+      .values({ channel, ...tier, createdAt: nowDate, updatedAt: nowDate })
+      .run();
+  }
+  // Recalcula o preço sugerido de toda variante com preço nesse canal.
+  const variantsWithPrice = db
+    .select({ id: variantPrices.variantId })
+    .from(variantPrices)
+    .where(eq(variantPrices.channel, channel))
+    .all();
+  for (const v of variantsWithPrice) recomputeSuggested(db, v.id);
+  return { ok: true, value: { tiers } };
 }
 
 /* ============================== Printers ============================== */
@@ -859,12 +920,13 @@ export function getVariantCostBreakdown(db: Db, variantId: number): CostBreakdow
 function recomputeSuggested(db: Db, variantId: number): void {
   const cost =
     db.select({ cost: variants.costCents }).from(variants).where(eq(variants.id, variantId)).get()?.cost ?? 0;
+  const marginBps = variantMarginBps(db, variantId);
   const rows = db.select().from(variantPrices).where(eq(variantPrices.variantId, variantId)).all();
   for (const row of rows) {
-    const fee = channelFee(db, row.channel);
+    const tiers = channelFeeTiersOf(db, row.channel);
     let suggested: number;
     try {
-      suggested = computeSuggestedPriceCents(cost, row.marginBps, fee);
+      suggested = computeSuggestedPriceCentsByTiers(cost, marginBps, tiers);
     } catch {
       suggested = row.suggestedPriceCents;
     }

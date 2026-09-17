@@ -1,17 +1,16 @@
 "use client";
 
-import { type FeesState, reverseSaleFrom, setSaleFeeFrom } from "@/app/actions/sales-fees";
-import { MAX_FEE_BPS } from "@/lib/domain/fees";
+import { type FeesState, reverseSaleFrom, setReceivedFrom } from "@/app/actions/sales-fees";
 import { formatBRL } from "@/lib/domain/money";
 import type { ChannelSummaryRow, SaleRow } from "@/lib/sales/service";
 import type { Channel } from "@/lib/xml/channel";
 import { useEffect, useState, useTransition } from "react";
 
 /**
- * T041 — Taxas (US5): % padrão por canal (settings) + resumo do faturamento
- * por canal (bruto / taxas / líquido) + taxa editável em cada venda da lista.
- * O bruto da NFe nunca muda (faturamento imutável): editar taxa recalcula
- * líquido/margem apenas (T040).
+ * Taxas (US5) + apuração por RECEBIDO (005): % padrão por canal (settings) +
+ * resumo do faturamento por canal (bruto / taxas / líquido) + RECEBIDO editável
+ * em cada venda (fonte da verdade do lucro). O bruto da NFe nunca muda; a taxa é
+ * derivada = (bruto − frete) − recebido (somente-leitura).
  */
 
 const CANAL_LABEL: Record<Channel, string> = {
@@ -30,8 +29,6 @@ export default function TaxesPanel({
   const [fees, setFees] = useState<FeesState>({
     sales: initialSales,
     byChannel: initialByChannel,
-    channelFees: { shopee: 0, tiktok: 0, presencial: 0 },
-    channelFixedFees: { shopee: 0, tiktok: 0, presencial: 0 },
   });
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -46,13 +43,15 @@ export default function TaxesPanel({
     }));
   }, [initialSales, initialByChannel]);
 
-  const saleDraft = (saleId: number, bps: number): string => drafts[`sale:${saleId}`] ?? inputBps(bps);
+  const saleDraft = (saleId: number, receivedCents: number | null): string =>
+    drafts[`sale:${saleId}`] ?? (receivedCents === null ? "" : toBRL(receivedCents));
 
-  const applySale = (saleId: number, current: number) => {
+  const applyReceived = (saleId: number) => {
     const form = new FormData();
     form.set("id", String(saleId));
-    form.set("bps", saleDraft(saleId, current));
-    startTransition(async () => apply(await setSaleFeeFrom(form)));
+    const raw = (drafts[`sale:${saleId}`] ?? "").trim();
+    form.set("receivedCents", raw === "" ? "" : String(centsOf(raw)));
+    startTransition(async () => apply(await setReceivedFrom(form)));
   };
 
   const apply = (result: { ok: true; data: FeesState } | { ok: false; error: string }) => {
@@ -134,15 +133,14 @@ export default function TaxesPanel({
                   <th className="px-4 py-2">Canal</th>
                   <th className="px-4 py-2">Itens</th>
                   <th className="px-4 py-2 text-right">Bruto</th>
-                  <th className="px-4 py-2">Taxa</th>
+                  <th className="px-4 py-2">Recebido</th>
                   <th className="px-4 py-2 text-right">Líquido</th>
-                  <th className="px-4 py-2 text-right">Margem</th>
+                  <th className="px-4 py-2 text-right">Lucro</th>
                   <th className="px-4 py-2" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {fees.sales.map((sale) => {
-                  const bps = sale.grossCents > 0 ? Math.round((sale.feeCents / sale.grossCents) * 10_000) : 0;
                   return (
                     <tr key={sale.id}>
                       <td className="px-4 py-2 whitespace-nowrap">{sale.saleDate.toISOString().slice(0, 10)}</td>
@@ -162,31 +160,39 @@ export default function TaxesPanel({
                       <td className="px-4 py-2">
                         <div className="flex items-center gap-1">
                           <input
-                            type="number"
-                            min={0}
-                            max={MAX_FEE_BPS / 100}
-                            step={0.1}
-                            value={saleDraft(sale.id, bps)}
+                            type="text"
+                            inputMode="decimal"
+                            value={saleDraft(sale.id, sale.receivedCents)}
                             onChange={(event) =>
                               setDrafts((prev) => ({ ...prev, [`sale:${sale.id}`]: event.target.value }))
                             }
                             onKeyDown={(event) => {
-                              if (event.key === "Enter") applySale(sale.id, bps);
+                              if (event.key === "Enter") applyReceived(sale.id);
                             }}
-                            className="w-20 rounded-md border bg-background px-2 py-1 text-sm"
+                            placeholder="0,00"
+                            className="w-24 rounded-md border bg-background px-2 py-1 text-sm"
                           />
                           <button
                             type="button"
-                            onClick={() => applySale(sale.id, bps)}
+                            onClick={() => applyReceived(sale.id)}
                             disabled={pending}
                             className="rounded-md border px-1.5 py-1 text-xs text-muted-foreground disabled:opacity-50"
                           >
                             ok
                           </button>
                         </div>
+                        {sale.receivedCents === null && (
+                          <span className="mt-0.5 block text-[11px] text-muted-foreground">pendente</span>
+                        )}
                       </td>
                       <td className="px-4 py-2 text-right whitespace-nowrap">{formatBRL(sale.netCents)}</td>
-                      <td className="px-4 py-2 text-right whitespace-nowrap text-xs">{formatBRL(sale.liquidCents)}</td>
+                      <td className="px-4 py-2 text-right whitespace-nowrap text-xs">
+                        {sale.receivedCents === null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          formatBRL(sale.liquidCents)
+                        )}
+                      </td>
                       <td className="px-4 py-2 text-right whitespace-nowrap">
                         {sale.status === "normal" ? (
                           <button
@@ -213,11 +219,7 @@ export default function TaxesPanel({
   );
 }
 
-/** centavos de taxa em % (bps p/ input): taxa é um percentual do bruto. */
-function inputBps(bps: number): string {
-  return String(bps / 100);
-}
-
+/** centavos → R$ para o input do recebido. */
 function toBRL(cents: number): string {
   return (cents / 100).toFixed(2).replace(".", ",");
 }

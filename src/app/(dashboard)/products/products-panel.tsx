@@ -11,8 +11,9 @@ import {
 } from "@/app/actions/catalog";
 import type { CategoryRow, MaterialRow, ProductRow, VariantPriceRow, VariantRow } from "@/lib/catalog/service";
 import { formatBRL } from "@/lib/domain/money";
+import { type ChannelFeeTier, feeForPrice } from "@/lib/domain/pricing";
 import { cn } from "@/lib/utils";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
 
 /**
  * 002/US1–US3 — CRUD de produto → variante, com custo calculado, preços por
@@ -48,6 +49,7 @@ export default function ProductsPanel({
   const [filter, setFilter] = useState("");
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [margin, setMargin] = useState("35");
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -70,12 +72,14 @@ export default function ProductsPanel({
     setEditor({ mode: "create" });
     setName("");
     setCategoryId("");
+    setMargin("35");
   };
 
   const openEdit = (product: ProductRow) => {
     setEditor({ mode: "edit", product });
     setName(product.name);
     setCategoryId(product.categoryId ? String(product.categoryId) : "");
+    setMargin(String((product.marginBps ?? 3500) / 100));
   };
 
   const closeEditor = () => {
@@ -88,6 +92,7 @@ export default function ProductsPanel({
     const form = new FormData();
     form.set("name", name);
     form.set("categoryId", categoryId);
+    form.set("marginBps", margin);
     if (editor?.mode === "edit") form.set("id", String(editor.product.id));
     startTransition(async () =>
       applyProducts(await (editor?.mode === "edit" ? updateProduct(form) : createProduct(form))),
@@ -165,6 +170,15 @@ export default function ProductsPanel({
                 ))}
               </select>
             </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">Margem (%)</span>
+              <input
+                value={margin}
+                onChange={(event) => setMargin(event.target.value)}
+                inputMode="decimal"
+                className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+              />
+            </label>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -204,8 +218,8 @@ export default function ProductsPanel({
             </thead>
             <tbody className="divide-y divide-border">
               {visibleProducts.map((product) => (
-                <>
-                  <tr key={product.id} className={cn(!product.active && "opacity-60")}>
+                <Fragment key={product.id}>
+                  <tr className={cn(!product.active && "opacity-60")}>
                     <td className="max-w-60 px-4 py-2">
                       <span className="line-clamp-2">{product.name}</span>
                     </td>
@@ -256,7 +270,7 @@ export default function ProductsPanel({
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -414,6 +428,7 @@ function VariantEditorForm({
   const [packaging, setPackaging] = useState(toBRLInput(editing?.packagingCents ?? 0));
   const [prices, setPrices] = useState<VariantPriceRow[]>([]);
   const [breakdown, setBreakdown] = useState<CostBreakdown | null>(null);
+  const [tiers, setTiers] = useState<Record<"shopee" | "tiktok", ChannelFeeTier[]>>({ shopee: [], tiktok: [] });
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -424,10 +439,12 @@ function VariantEditorForm({
     Promise.all([
       import("@/app/actions/catalog").then((m) => m.getVariantPrices(f)),
       import("@/app/actions/catalog").then((m) => m.getVariantCostDetail(f)),
-    ]).then(([pr, br]) => {
+      import("@/app/actions/catalog").then((m) => m.getFeeTiers()),
+    ]).then(([pr, br, ft]) => {
       if (!active) return;
       if (pr.ok) setPrices(pr.data.prices);
       if (br.ok) setBreakdown(br.data.breakdown);
+      if (ft.ok) setTiers(ft.data.tiers);
     });
     return () => {
       active = false;
@@ -530,7 +547,9 @@ function VariantEditorForm({
       </div>
 
       {variantId !== 0 && <CostBreakdownBox breakdown={breakdown} />}
-      {variantId !== 0 && <PriceEditor variantId={variantId} initial={prices} costCents={editing?.costCents ?? 0} />}
+      {variantId !== 0 && (
+        <PriceEditor variantId={variantId} initial={prices} costCents={editing?.costCents ?? 0} tiers={tiers} />
+      )}
       {variantId !== 0 && <AccessoriesEditor variantId={variantId} />}
       {variantId !== 0 && <CodesEditor variantId={variantId} />}
 
@@ -588,77 +607,126 @@ function PriceEditor({
   variantId,
   initial,
   costCents,
+  tiers,
 }: {
   variantId: number;
   initial: VariantPriceRow[];
   costCents: number;
+  tiers: Record<"shopee" | "tiktok", ChannelFeeTier[]>;
 }) {
   const [prices, setPrices] = useState<VariantPriceRow[]>(initial);
-  const [pending, startTransition] = useTransition();
   const channels = ["shopee", "tiktok"] as const;
+
+  // Os preços vêm do banco de forma assíncrona (o pai começa com []); ressincroniza
+  // quando o prop `initial` muda (após o fetch), sem perder o que foi salvo via onSaved.
+  useEffect(() => {
+    setPrices(initial);
+  }, [initial]);
 
   return (
     <div className="rounded-md border bg-muted/20 p-2">
       <span className="text-xs font-semibold text-muted-foreground">Preço por canal</span>
       <div className="mt-2 space-y-2">
-        {channels.map((channel) => {
-          const price = prices.find((p) => p.channel === channel);
-          const [margin, setMargin] = useState(String(price?.marginBps ?? "0"));
-          const [practiced, setPracticed] = useState(toBRLInput(price?.practicedPriceCents ?? 0));
-          const profit = (price?.practicedPriceCents ?? 0) - costCents;
-          const profitBps =
-            (price?.practicedPriceCents ?? 0) > 0 ? (profit / (price?.practicedPriceCents ?? 1)) * 100 : 0;
-          return (
-            <div key={channel} className="flex flex-wrap items-end gap-2">
-              <span className="w-16 text-xs capitalize text-muted-foreground">{channel}</span>
-              <label className="block">
-                <span className="text-xs text-muted-foreground">Margem %</span>
-                <input
-                  value={margin}
-                  onChange={(e) => setMargin(e.target.value)}
-                  inputMode="decimal"
-                  className="mt-0.5 w-20 rounded-md border bg-background px-2 py-1 text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs text-muted-foreground">Preço praticado (R$)</span>
-                <input
-                  value={practiced}
-                  onChange={(e) => setPracticed(e.target.value)}
-                  inputMode="decimal"
-                  placeholder="0,00"
-                  className="mt-0.5 w-28 rounded-md border bg-background px-2 py-1 text-sm"
-                />
-              </label>
-              <span className="text-xs text-muted-foreground">
-                sugerido {price ? formatBRL(price.suggestedPriceCents) : "—"}
-              </span>
-              <span className="text-xs">
-                lucro {formatBRL(profit)}{" "}
-                <span className="text-muted-foreground">({profitBps.toFixed(1).replace(".", ",")}%)</span>
-              </span>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => {
-                  const f = new FormData();
-                  f.set("variantId", String(variantId));
-                  f.set("channel", channel);
-                  f.set("marginBps", String(Number(margin) * 100));
-                  f.set("practicedPriceCents", String(centsOf(practiced)));
-                  startTransition(async () => {
-                    const r = await upsertVariantPriceAction(f);
-                    if (r.ok) setPrices(r.data.prices);
-                  });
-                }}
-                className="rounded-md border px-2 py-1 text-xs text-muted-foreground disabled:opacity-50"
-              >
-                Salvar
-              </button>
-            </div>
-          );
-        })}
+        {channels.map((channel) => (
+          <ChannelPriceEditor
+            key={channel}
+            variantId={variantId}
+            channel={channel}
+            price={prices.find((p) => p.channel === channel)}
+            costCents={costCents}
+            tiers={tiers[channel]}
+            onSaved={(next) =>
+              setPrices((prev) =>
+                prev.some((p) => p.channel === next.channel)
+                  ? prev.map((p) => (p.channel === next.channel ? next : p))
+                  : [...prev, next],
+              )
+            }
+          />
+        ))}
       </div>
+    </div>
+  );
+}
+
+function ChannelPriceEditor({
+  variantId,
+  channel,
+  price,
+  costCents,
+  tiers,
+  onSaved,
+}: {
+  variantId: number;
+  channel: "shopee" | "tiktok";
+  price: VariantPriceRow | undefined;
+  costCents: number;
+  tiers: ChannelFeeTier[];
+  onSaved: (next: VariantPriceRow) => void;
+}) {
+  const [practiced, setPracticed] = useState(toBRLInput(price?.practicedPriceCents ?? 0));
+  const [pending, startTransition] = useTransition();
+  const practicedCents = price?.practicedPriceCents ?? 0;
+
+  // Lucro (est.) = praticado − taxa do canal (faixa) − custo de produção.
+  let feeCents = 0;
+  if (practicedCents > 0 && tiers.length > 0) {
+    try {
+      const tier = feeForPrice(practicedCents, tiers);
+      feeCents = Math.round((practicedCents * tier.commissionBps) / 10_000) + tier.fixedCents;
+    } catch {
+      feeCents = 0;
+    }
+  }
+  const profit = practicedCents - costCents - feeCents;
+  const profitBps = practicedCents > 0 ? (profit / practicedCents) * 100 : 0;
+
+  // Sincroniza com o preço vindo do banco (o pai busca os preços de forma assíncrona),
+  // sem sobrescrever enquanto o usuário digita.
+  useEffect(() => {
+    setPracticed(toBRLInput(price?.practicedPriceCents ?? 0));
+  }, [price?.practicedPriceCents]);
+
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <span className="w-16 text-xs capitalize text-muted-foreground">{channel}</span>
+      <label className="block">
+        <span className="text-xs text-muted-foreground">Preço praticado (R$)</span>
+        <input
+          value={practiced}
+          onChange={(e) => setPracticed(e.target.value)}
+          inputMode="decimal"
+          placeholder="0,00"
+          className="mt-0.5 w-28 rounded-md border bg-background px-2 py-1 text-sm"
+        />
+      </label>
+      <span className="text-xs text-muted-foreground">
+        sugerido {price ? formatBRL(price.suggestedPriceCents) : "—"}
+      </span>
+      <span className="text-xs">
+        lucro (est.) {formatBRL(profit)}{" "}
+        <span className="text-muted-foreground">({profitBps.toFixed(1).replace(".", ",")}%)</span>
+      </span>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          const f = new FormData();
+          f.set("variantId", String(variantId));
+          f.set("channel", channel);
+          f.set("practicedPriceCents", String(centsOf(practiced)));
+          startTransition(async () => {
+            const r = await upsertVariantPriceAction(f);
+            if (r.ok) {
+              const saved = r.data.prices.find((p) => p.channel === channel);
+              if (saved) onSaved(saved);
+            }
+          });
+        }}
+        className="rounded-md border px-2 py-1 text-xs text-muted-foreground disabled:opacity-50"
+      >
+        Salvar
+      </button>
     </div>
   );
 }

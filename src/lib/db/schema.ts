@@ -41,6 +41,7 @@ export const products = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     name: text("name").notNull(),
     categoryId: integer("category_id").references(() => categories.id, { onDelete: "set null" }),
+    marginBps: integer("margin_bps").notNull().default(3500), // margem unificada (005) — % do preço bruto
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
@@ -145,7 +146,6 @@ export const variantPrices = sqliteTable(
       .notNull()
       .references(() => variants.id, { onDelete: "cascade" }),
     channel: text("channel").notNull(), // shopee | tiktok
-    marginBps: integer("margin_bps").notNull().default(0),
     suggestedPriceCents: integer("suggested_price_cents").notNull().default(0),
     practicedPriceCents: integer("practiced_price_cents").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp" })
@@ -164,6 +164,32 @@ export const variantPrices = sqliteTable(
 export const variantPriceRelations = relations(variantPrices, ({ one }) => ({
   variant: one(variants, { fields: [variantPrices.variantId], references: [variants.id] }),
 }));
+
+/* ============================== ChannelFeeTier ============================== */
+
+export const channelFeeTiers = sqliteTable(
+  "channel_fee_tiers",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    channel: text("channel").notNull(), // shopee | tiktok
+    minCents: integer("min_cents").notNull(), // faixa mínima (inclusiva)
+    maxCents: integer("max_cents"), // faixa máxima (inclusiva); null = aberto acima
+    commissionBps: integer("commission_bps").notNull().default(0), // comissão % (0..10000)
+    fixedCents: integer("fixed_cents").notNull().default(0), // taxa fixa (R$)
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("channel_fee_tiers_channel_min_max_idx").on(t.channel, t.minCents, t.maxCents),
+    index("channel_fee_tiers_channel_idx").on(t.channel),
+  ],
+);
+
+export const channelFeeTierRelations = relations(channelFeeTiers, () => ({}));
 
 /* ============================== Printer ============================== */
 
@@ -226,9 +252,11 @@ export const sales = sqliteTable(
     status: text("status").notNull().default("normal"), // normal | refunded
     refundDate: integer("refund_date", { mode: "timestamp" }),
     grossCents: integer("gross_cents").notNull(), // valor bruto (NFe) — imutável
-    feeCents: integer("fee_cents").notNull().default(0), // taxa marketplace, editável
-    netCents: integer("net_cents").notNull(), // = gross - fee (financeiro)
-    liquidCents: integer("liquid_cents").notNull().default(0), // = gross - fee - costo (margem)
+    freightCents: integer("freight_cents").notNull().default(0), // vFrete da NFe (005)
+    receivedCents: integer("received_cents"), // valor que cai na conta (005); null = pendente
+    feeCents: integer("fee_cents").notNull().default(0), // derivado = (gross - freight) - received (somente-leitura)
+    netCents: integer("net_cents").notNull(), // = received ?? gross (financeiro)
+    liquidCents: integer("liquid_cents").notNull().default(0), // = received - Σ(custo×qtd) (margem); 0 = pendente
     invoiceNumber: text("invoice_number"),
     invoiceSerie: text("invoice_serie"),
     issueDate: integer("issue_date", { mode: "timestamp" }), // dhEmi da NFe

@@ -1,8 +1,7 @@
-import { feeFromBps, marginOf, netOf } from "@/lib/domain/cxmoney";
+import { netOfReceived } from "@/lib/domain/cxmoney";
 import { type SQL, and, eq } from "drizzle-orm";
 import { type Db, getDb } from "../db/client";
 import { productCodes, saleItems, sales, variants } from "../db/schema";
-import { getChannelFeeBps } from "../sales/service";
 import type { Channel } from "./channel";
 import { linkItems } from "./link";
 import type { ParsedInvoice } from "./parser";
@@ -70,11 +69,9 @@ export function importNfeToDb(
     .filter(({ linked }) => linked.variantId === null)
     .map(({ item }) => ({ cProd: item.cProd, description: item.description }));
 
-  const totalCost = linked.reduce((sum, item) => sum + (item.frozenCostCents ?? 0), 0);
-  // US5/T040: taxa nasce com o % padrão configurado do canal (0 se não configurado)
-  const feeCents = feeFromBps(invoice.grossCents, getChannelFeeBps(channel, { db }));
-  const netCents = netOf(invoice.grossCents, feeCents);
-  const liquidCents = marginOf(invoice.grossCents, feeCents, totalCost);
+  // 005 — recebido ausente na importação (relatório/manual depois); lucro fica pendente (0).
+  const netCents = netOfReceived(null, invoice.grossCents);
+  const liquidCents = 0; // pendente — recebido ainda não informado
 
   try {
     const saleId = db.transaction((tx) => {
@@ -84,7 +81,9 @@ export function importNfeToDb(
           channel,
           saleDate: invoice.issueDate,
           grossCents: invoice.grossCents,
-          feeCents,
+          freightCents: invoice.freightCents ?? 0,
+          receivedCents: null,
+          feeCents: 0, // derivado após recebido informado
           netCents,
           liquidCents,
           invoiceNumber: invoice.invoiceNumber,

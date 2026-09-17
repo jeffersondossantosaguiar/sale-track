@@ -1,9 +1,9 @@
 import { type Db, getDb } from "@/lib/db/client";
 import { cashEntries, saleItems, sales, variantPrices, variants } from "@/lib/db/schema";
-import { getNumberSetting, getSetting } from "@/lib/db/settings";
-import { feeFromBps, marginOf, netOf } from "@/lib/domain/cxmoney";
+import { getSetting } from "@/lib/db/settings";
+import { feeFromBps, feeOf, marginOf, netOf, netOfReceived, productOf, profitOf } from "@/lib/domain/cxmoney";
 import { dateSchema } from "@/lib/domain/date";
-import { MAX_FEE_BPS, channelFeeFixedSettingKey, channelFeeSettingKey, normalizeBps } from "@/lib/domain/fees";
+import { MAX_FEE_BPS, channelFeeSettingKey, normalizeBps } from "@/lib/domain/fees";
 import { presentialSaleInputSchema } from "@/lib/domain/presential";
 import type { Channel } from "@/lib/xml/channel";
 import { type SQL, and, eq, gte, inArray, lt, sql } from "drizzle-orm";
@@ -28,10 +28,13 @@ export type SaleRow = {
   saleDate: Date;
   status: string;
   grossCents: number;
+  freightCents: number;
+  receivedCents: number | null;
   feeCents: number;
   netCents: number;
   liquidCents: number;
   invoiceNumber: string | null;
+  xmlFilename: string | null;
   itemCount: number;
   firstItem: string | null;
 };
@@ -56,10 +59,13 @@ export function listSales(opts?: { db?: Db }): SaleRow[] {
       saleDate: sales.saleDate,
       status: sales.status,
       grossCents: sales.grossCents,
+      freightCents: sales.freightCents,
+      receivedCents: sales.receivedCents,
       feeCents: sales.feeCents,
       netCents: sales.netCents,
       liquidCents: sales.liquidCents,
       invoiceNumber: sales.invoiceNumber,
+      xmlFilename: sales.xmlFilename,
     })
     .from(sales)
     .orderBy(sql`${sales.saleDate} desc, ${sales.id} desc`)
@@ -164,7 +170,7 @@ export function createPresentialSale(input: unknown, opts?: { db?: Db }): Servic
     });
   }
   const totalCostCents = totals.reduce((sum, entry) => sum + entry.frozenCostCents * entry.quantity, 0);
-  const liquidCents = marginOf(receivedCents, 0, totalCostCents);
+  const liquidCents = profitOf(receivedCents, totalCostCents);
   const cashDescription =
     totals.length === 1 ? `Venda presencial — ${totals[0].variant.name}` : `Venda presencial (${totals.length} itens)`;
 
@@ -177,6 +183,8 @@ export function createPresentialSale(input: unknown, opts?: { db?: Db }): Servic
           saleDate,
           status: "normal",
           grossCents: receivedCents,
+          freightCents: 0,
+          receivedCents,
           feeCents: 0,
           netCents: receivedCents,
           liquidCents,
@@ -222,14 +230,9 @@ export function createPresentialSale(input: unknown, opts?: { db?: Db }): Servic
 
 /* ============================ Taxas (US5/T039–T040) ============================ */
 
-/** % padrão configurada para um canal (0 quando ausente) — usada na importação. */
+/** % padrão configurada para um canal (0 quando ausente) — legado; usada em testes. */
 export function getChannelFeeBps(channel: Channel, opts?: { db?: Db }): number {
   return normalizeBps(getSetting(channelFeeSettingKey(channel), opts));
-}
-
-/** Taxa FIXA (centavos) padrão por canal (002/FR-013) — usada no preço sugerido. */
-export function getChannelFeeFixedCents(channel: Channel, opts?: { db?: Db }): number {
-  return getNumberSetting(channelFeeFixedSettingKey(channel), 0, opts);
 }
 
 export type ChannelSummaryRow = {
@@ -274,8 +277,38 @@ function totalCostCentsOf(db: Db, saleId: number): number {
 }
 
 /**
- * Ajusta a taxa de UMA venda (T040/T041): taxa → líquido → margem, SEM nunca
- * tocar o bruto (faturamento da NFe é imutável). O caixa não muda (ledger D8).
+ * Define o RECEBIDO de UMA venda (005) — fonte da verdade do lucro.
+ * Deriva: net = received ?? gross; fee = (gross − freight) − received (somente-leitura);
+ * lucro = received − custo. Não toca o bruto (faturamento imutável). Caixa não muda (ledger D8).
+ */
+export function setReceived(
+  saleId: number,
+  receivedCents: number | null,
+  opts?: { db?: Db },
+): ServiceResult<{ sale: SaleRow }> {
+  const db = dbOf(opts);
+  const sale = db.select().from(sales).where(eq(sales.id, saleId)).get();
+  if (!sale) return { ok: false, error: "venda não encontrada" };
+  if (receivedCents !== null && (!Number.isInteger(receivedCents) || receivedCents < 0)) {
+    return { ok: false, error: "valor recebido inválido (deve ser ≥ 0)" };
+  }
+
+  const netCents = netOfReceived(receivedCents, sale.grossCents);
+  const productCents = productOf(sale.grossCents, sale.freightCents);
+  const feeCents = feeOf(productCents, receivedCents) ?? 0;
+  const liquidCents = receivedCents === null ? 0 : profitOf(receivedCents, totalCostCentsOf(db, saleId));
+
+  db.update(sales).set({ receivedCents, feeCents, netCents, liquidCents }).where(eq(sales.id, saleId)).run();
+
+  const row = listSales({ db }).find((candidate) => candidate.id === saleId);
+  if (!row) return { ok: false, error: "venda não encontrada após atualização" };
+  return { ok: true, value: { sale: row } };
+}
+
+/**
+ * Ajusta a taxa de UMA venda (T040/T041, legado): taxa → líquido → margem, SEM
+ * tocar o bruto. Na apuração por recebido (005) a taxa é derivada; mantido para
+ * compatibilidade de testes/UI de taxas.
  */
 export function setSaleFee(saleId: number, feeBps: number, opts?: { db?: Db }): ServiceResult<{ sale: SaleRow }> {
   const db = dbOf(opts);

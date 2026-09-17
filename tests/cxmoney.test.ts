@@ -1,4 +1,14 @@
-import { type MoneyCents, feeFromBps, marginBpsOf, marginOf, netOf } from "@/lib/domain/cxmoney";
+import {
+  type MoneyCents,
+  feeFromBps,
+  feeOf,
+  marginBpsOf,
+  marginOf,
+  netOf,
+  netOfReceived,
+  productOf,
+  profitOf,
+} from "@/lib/domain/cxmoney";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -57,5 +67,28 @@ describe("cxmoney.money convictos", () => {
     const minBig: MoneyCents = Number.MIN_SAFE_INTEGER;
     expect(() => netOf(big, minBig)).toThrow(/seguro|overflow/i);
     expect(() => marginOf(big, minBig, 1)).toThrow(/seguro|overflow/i);
+  });
+});
+
+describe("cxmoney apuração por recebido (005)", () => {
+  it("productOf = bruto − frete", () => {
+    expect(productOf(156_49, 23_87)).toBe(132_62);
+    expect(productOf(156_49, 0)).toBe(156_49);
+  });
+
+  it("feeOf = produto − recebido (derivada); nil sem recebido", () => {
+    expect(feeOf(132_62, 110_00)).toBe(22_62);
+    expect(feeOf(19_28, 11_17)).toBe(8_11);
+    expect(feeOf(132_62, null)).toBeNull();
+  });
+
+  it("profitOf = recebido − custo (pode ser prejuízo)", () => {
+    expect(profitOf(11_17, 5_00)).toBe(6_17);
+    expect(profitOf(5_00, 8_00)).toBe(-3_00);
+  });
+
+  it("netOfReceived = recebido ?? bruto", () => {
+    expect(netOfReceived(8_800, 10_000)).toBe(8_800);
+    expect(netOfReceived(null, 10_000)).toBe(10_000);
   });
 });

@@ -47,6 +47,12 @@ export const productInputSchema = z.object({
       z.null().or(z.coerce.number().int().positive("categoria inválida")),
     )
     .optional(),
+  marginBps: z.coerce
+    .number()
+    .int("margem deve ser inteiro")
+    .min(0, "margem >= 0")
+    .max(10000, "margem <= 100%")
+    .optional(),
 });
 
 export type ProductInput = z.infer<typeof productInputSchema>;

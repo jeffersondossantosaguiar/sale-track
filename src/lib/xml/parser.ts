@@ -24,6 +24,7 @@ export interface ParsedInvoice {
   serie: string;
   issueDate: Date; // dhEmi (offset -03:00 preservado pelo Date)
   grossCents: number; // vNF — bruto imutável
+  freightCents?: number; // vFrete — frete pago (default 0 quando ausente) — 005
   items: ParsedInvoiceItem[];
   warnings: string[];
 }
@@ -116,6 +117,18 @@ export function parseXmlInvoice(rawXml: string): XmlParseResult {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 
+  // 005 — frete (vFrete); default 0 quando ausente (marketplace cobre ou presencial).
+  const vFreteRaw = totalBlock ? fieldText(totalBlock, "vFrete") : fieldText(xml, "vFrete");
+  let freightCents = 0;
+  if (vFreteRaw !== null && vFreteRaw.trim() !== "") {
+    try {
+      freightCents = decimalToCents(vFreteRaw);
+    } catch {
+      freightCents = 0;
+    }
+  }
+  if (freightCents < 0) freightCents = 0;
+
   const invoiceNumber = fieldText(nfeBlock, "nNF")?.trim() ?? "";
   const serieRaw = fieldText(nfeBlock, "serie")?.trim() ?? "";
   const dhEmiRaw = fieldText(nfeBlock, "dhEmi") ?? "";
@@ -163,6 +176,6 @@ export function parseXmlInvoice(rawXml: string): XmlParseResult {
 
   return {
     ok: true,
-    invoice: { invoiceNumber, serie: serieRaw, issueDate, grossCents, items, warnings },
+    invoice: { invoiceNumber, serie: serieRaw, issueDate, grossCents, freightCents, items, warnings },
   };
 }

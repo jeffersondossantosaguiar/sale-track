@@ -60,6 +60,7 @@ describe("T014 — parse NFe 55 → modelo normalizado", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.invoice.grossCents).toBe(3208); // vNF 32,08 (18,88 + frete 13,20)
+    expect(result.invoice.freightCents).toBe(1320); // vFrete 13,20 (005)
     expect(result.invoice.warnings.some((w) => w.includes("difere do vNF"))).toBe(true);
   });
 

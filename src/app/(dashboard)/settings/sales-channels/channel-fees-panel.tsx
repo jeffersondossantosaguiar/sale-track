@@ -1,115 +1,100 @@
 "use client";
 
-import { setChannelFeeFrom } from "@/app/actions/sales-fees";
-import { MAX_FEE_BPS } from "@/lib/domain/fees";
-import type { Channel } from "@/lib/xml/channel";
+import { saveChannelFeeTiersAction } from "@/app/actions/catalog";
+import { formatTierForText, parseFeeTiersText } from "@/lib/domain/fees";
 import { useState, useTransition } from "react";
 
 /**
- * FR-013 — Taxa padrão por canal (% + fixa). Extraído do taxes-panel em Vendas.
- * O resumo por canal e a lista operacional de vendas permanecem em Vendas.
+ * 005 — Taxa de cada canal = tabela de faixas (comissão% + fixa por valor do item),
+ * usada no preço sugerido. Editor de texto → linhas estruturadas com prévia e
+ * validação antes de salvar. (O antigo "% + fixa" por canal foi substituído.)
  */
 
-const CANAL_LABEL: Record<Channel, string> = {
+const CANAL_LABEL: Record<string, string> = {
   shopee: "Shopee",
   tiktok: "TikTok",
-  presencial: "Presencial",
 };
 
+const TIER_CHANNELS = ["shopee", "tiktok"] as const;
+
+type Tier = { minCents: number; maxCents: number | null; commissionBps: number; fixedCents: number };
+
 export default function ChannelFeesPanel({
-  initialChannelFees,
-  initialChannelFeesFixed,
+  initialChannelTiers,
 }: {
-  initialChannelFees: Record<Channel, number>;
-  initialChannelFeesFixed: Record<Channel, number>;
+  initialChannelTiers: Record<"shopee" | "tiktok", Tier[]>;
 }) {
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [message, setMessage] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  const channelDraft = (channel: Channel, bps: number): string => drafts[`channel:${channel}`] ?? inputBps(bps);
-  const fixedDraft = (channel: Channel, cents: number): string => drafts[`fixed:${channel}`] ?? toBRL(cents);
-
-  const applyChannel = (channel: Channel) => {
-    const form = new FormData();
-    form.set("channel", channel);
-    form.set("bps", channelDraft(channel, initialChannelFees[channel] ?? 0));
-    form.set("fixedCents", String(centsOf(fixedDraft(channel, initialChannelFeesFixed[channel] ?? 0))));
-    startTransition(async () => {
-      const r = await setChannelFeeFrom(form);
-      if (r.ok) {
-        setMessage(null);
-        setDrafts({});
-      } else {
-        setMessage(r.error);
-      }
-    });
-  };
-
   return (
-    <div className="space-y-3">
-      <h3 className="text-xs font-semibold text-muted-foreground">Taxa padrão por canal</h3>
-      <p className="text-xs text-muted-foreground">
-        A % e a taxa fixa configuradas viram a taxa inicial das próximas vendas importadas do canal.
-      </p>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {(Object.keys(CANAL_LABEL) as Channel[]).map((channel) => (
-          <div key={channel} className="rounded-md border bg-background p-2">
-            <span className="text-xs text-muted-foreground">{CANAL_LABEL[channel]}</span>
-            <div className="mt-1 flex items-center gap-2">
-              <label className="block">
-                <span className="text-[10px] text-muted-foreground">%</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={MAX_FEE_BPS / 100}
-                  step={0.1}
-                  value={channelDraft(channel, initialChannelFees[channel] ?? 0)}
-                  onChange={(event) => setDrafts((prev) => ({ ...prev, [`channel:${channel}`]: event.target.value }))}
-                  className="w-20 rounded-md border bg-background px-2 py-1 text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[10px] text-muted-foreground">Fixa (R$)</span>
-                <input
-                  value={fixedDraft(channel, initialChannelFeesFixed[channel] ?? 0)}
-                  onChange={(event) => setDrafts((prev) => ({ ...prev, [`fixed:${channel}`]: event.target.value }))}
-                  inputMode="decimal"
-                  placeholder="0,00"
-                  className="w-20 rounded-md border bg-background px-2 py-1 text-sm"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => applyChannel(channel)}
-                disabled={pending}
-                className="mt-3 rounded-md border px-2 py-1 text-xs text-muted-foreground disabled:opacity-50"
-              >
-                Aplicar
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-      {message && <p className="text-xs text-red-600">{message}</p>}
+    <div className="space-y-5">
+      {TIER_CHANNELS.map((channel) => (
+        <FeeTiersEditor key={channel} channel={channel} initial={initialChannelTiers[channel]} />
+      ))}
     </div>
   );
 }
 
-function inputBps(bps: number): string {
-  return String(bps / 100);
-}
+function FeeTiersEditor({ channel, initial }: { channel: "shopee" | "tiktok"; initial: Tier[] }) {
+  const [text, setText] = useState(initial.map(formatTierForText).join("\n"));
+  const [saved, setSaved] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
 
-function toBRL(cents: number): string {
-  return (cents / 100).toFixed(2).replace(".", ",");
-}
+  const preview = (() => {
+    try {
+      return { ok: true as const, tiers: parseFeeTiersText(text) };
+    } catch (error) {
+      return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
+    }
+  })();
 
-function centsOf(raw: string): number {
-  const cleaned = raw
-    .trim()
-    .replace(/[R$\s]/g, "")
-    .replace(".", "")
-    .replace(",", ".");
-  const value = Math.round(Number(cleaned) * 100);
-  return Number.isFinite(value) && value >= 0 ? value : 0;
+  const save = () => {
+    const form = new FormData();
+    form.set("channel", channel);
+    form.set("text", text);
+    startTransition(async () => {
+      const r = await saveChannelFeeTiersAction(form);
+      if (r.ok) setSaved("Faixas salvas e preços sugeridos recalculados.");
+      else setSaved(r.error);
+    });
+  };
+
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <h3 className="text-xs font-semibold text-muted-foreground">Faixas de taxa — {CANAL_LABEL[channel]}</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Uma regra por linha, ex.: <code className="text-[11px]">{"<= 79,99 = 20% + 4"}</code> ·{" "}
+        <code className="text-[11px]">{"80,00 - 99,99 = 14% + 4"}</code> ·{" "}
+        <code className="text-[11px]">{">= 500,00 = 14% + 26"}</code>
+      </p>
+      <textarea
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        rows={initial.length || 2}
+        spellCheck={false}
+        className="mt-2 w-full rounded-md border bg-background px-2 py-1 font-mono text-xs"
+      />
+      <div className="mt-2 text-xs">
+        <span className="text-muted-foreground">Prévia: </span>
+        {preview.ok ? (
+          <span className="text-green-700">
+            {preview.tiers
+              .map((t) => `${formatTierForText(t)} (${(t.commissionBps / 100).toFixed(0).replace(".", ",")}%)`)
+              .join(" · ")}
+          </span>
+        ) : (
+          <span className="text-red-600">{preview.error}</span>
+        )}
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={save}
+          disabled={pending || !preview.ok}
+          className="rounded-md border px-2 py-1 text-xs text-muted-foreground disabled:opacity-50"
+        >
+          Salvar faixas
+        </button>
+        {saved && <span className="text-xs text-green-700">{saved}</span>}
+      </div>
+    </div>
+  );
 }

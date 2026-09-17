@@ -30,6 +30,7 @@ import {
   linkUnlinkedToVariant as linkUnlinkedService,
   listAccessories,
   listCategories,
+  listChannelFeeTiers,
   listMaterials,
   listPrinters,
   listProductCodes as listProductCodesService,
@@ -40,6 +41,7 @@ import {
   recalcAllCosts,
   removeAccessory,
   renameCategory as renameCategoryService,
+  saveChannelFeeTiers,
   setProductActive as setProductActiveService,
   setVariantActive as setVariantActiveService,
   updateMaterial as updateMaterialService,
@@ -51,6 +53,7 @@ import {
 import { getDb } from "@/lib/db/client";
 import { setNumberSetting } from "@/lib/db/settings";
 import type { ProductCodeInput } from "@/lib/domain/catalog";
+import { percentToBps } from "@/lib/domain/fees";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -70,9 +73,11 @@ function parseBool(raw: FormDataEntryValue | null): boolean {
 }
 
 function productForm(formData: FormData) {
+  const marginRaw = String(formData.get("marginBps") ?? "");
   return {
     name: String(formData.get("name") ?? ""),
     categoryId: parseOptionalId(formData.get("categoryId")),
+    ...(marginRaw !== "" ? { marginBps: percentToBps(Number(marginRaw)) } : {}),
   };
 }
 
@@ -129,6 +134,8 @@ export async function updateProduct(formData: FormData): Promise<ActionResult<{ 
   const patch: Record<string, unknown> = {};
   if (formData.has("name")) patch.name = String(formData.get("name"));
   if (formData.has("categoryId")) patch.categoryId = parseOptionalId(formData.get("categoryId"));
+  if (formData.has("marginBps") && String(formData.get("marginBps")) !== "")
+    patch.marginBps = percentToBps(Number(formData.get("marginBps")));
   const result = updateProductService(Number(formData.get("id")), patch, { db });
   if (!result.ok) return actionError(result.error);
   revalidatePath("/products");
@@ -299,7 +306,6 @@ export async function upsertVariantPriceAction(
     variantId,
     {
       channel: String(formData.get("channel")) as "shopee" | "tiktok",
-      ...(formData.has("marginBps") ? { marginBps: Number(formData.get("marginBps")) } : {}),
       ...(formData.has("practicedPriceCents")
         ? { practicedPriceCents: Number(formData.get("practicedPriceCents")) }
         : {}),
@@ -312,6 +318,34 @@ export async function upsertVariantPriceAction(
   if (!result.ok) return actionError(result.error);
   revalidatePath("/products");
   return actionData({ prices: listVariantPrices(variantId, { db }) });
+}
+
+/** Salva as faixas de taxa de um canal (005) a partir do texto do editor. */
+export async function saveChannelFeeTiersAction(
+  formData: FormData,
+): Promise<ActionResult<{ channel: string; text: string }>> {
+  const db = getDb().db;
+  const channel = String(formData.get("channel")) as "shopee" | "tiktok";
+  const text = String(formData.get("text") ?? "");
+  const result = saveChannelFeeTiers(channel, text, { db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ channel, text });
+}
+
+/** Faixas de taxa por canal (005) — para o lucro estimado do editor de preço. */
+export async function getFeeTiers(): Promise<
+  ActionResult<{
+    tiers: Record<
+      "shopee" | "tiktok",
+      Array<{ minCents: number; maxCents: number | null; commissionBps: number; fixedCents: number }>
+    >;
+  }>
+> {
+  const db = getDb().db;
+  return actionData({
+    tiers: { shopee: listChannelFeeTiers("shopee", { db }), tiktok: listChannelFeeTiers("tiktok", { db }) },
+  });
 }
 
 /* ============================== Printers ============================== */

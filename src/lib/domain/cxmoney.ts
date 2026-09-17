@@ -58,3 +58,42 @@ export function marginBpsOf(grossCents: MoneyCents, margin: MoneyCents): number 
   const result = Math.round((margin * 10_000) / grossCents);
   return Number.isSafeInteger(result) ? result : 0;
 }
+
+/**
+ * Apuração por "recebido" (005) — o valor que cai na conta é a fonte da verdade.
+ *
+ *   produto = bruto − frete                      (productOf)
+ *   taxa    = produto − recebido                (feeOf, derivada, somente-leitura)
+ *   lucro   = recebido − custo congelado         (profitOf)
+ *   net     = recebido ?? bruto                  (netOfReceived)
+ */
+
+/** Produto = bruto − frete (frete default 0). */
+export function productOf(grossCents: MoneyCents, freightCents: MoneyCents): MoneyCents {
+  assertCents(grossCents, "bruto");
+  assertCents(freightCents, "frete");
+  return safeSub(grossCents, freightCents, "produto");
+}
+
+/** Taxa = produto − recebido (derivada). Pode ser negativa em casos anômalos; nil quando recebido ausente. */
+export function feeOf(productCents: MoneyCents, receivedCents: MoneyCents | null): MoneyCents | null {
+  assertCents(productCents, "produto");
+  if (receivedCents === null) return null;
+  assertCents(receivedCents, "recebido");
+  return safeSub(productCents, receivedCents, "taxa");
+}
+
+/** Lucro = recebido − custo. Pode ser negativo (prejuízo). */
+export function profitOf(receivedCents: MoneyCents, costCents: MoneyCents): MoneyCents {
+  assertCents(receivedCents, "recebido");
+  assertCents(costCents, "custo");
+  return safeSub(receivedCents, costCents, "lucro");
+}
+
+/** Net financeiro = recebido ?? bruto. */
+export function netOfReceived(receivedCents: MoneyCents | null, grossCents: MoneyCents): MoneyCents {
+  assertCents(grossCents, "bruto");
+  if (receivedCents === null) return grossCents;
+  assertCents(receivedCents, "recebido");
+  return receivedCents;
+}

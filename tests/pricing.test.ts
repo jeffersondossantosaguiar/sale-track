@@ -1,4 +1,10 @@
-import { computeProfitBps, computeProfitCents, computeSuggestedPriceCents } from "@/lib/domain/pricing";
+import {
+  computeProfitBps,
+  computeProfitCents,
+  computeSuggestedPriceCents,
+  computeSuggestedPriceCentsByTiers,
+  feeForPrice,
+} from "@/lib/domain/pricing";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -29,5 +35,45 @@ describe("pricing.profit", () => {
 
   it("0% quando praticado ≤ 0", () => {
     expect(computeProfitBps(0, 1322)).toBe(0);
+  });
+});
+
+describe("pricing.faixas (005)", () => {
+  const shopee = [
+    { minCents: 0, maxCents: 7_999, commissionBps: 2000, fixedCents: 4_00 },
+    { minCents: 8_000, maxCents: 9_999, commissionBps: 1400, fixedCents: 4_00 },
+    { minCents: 10_000, maxCents: null, commissionBps: 1400, fixedCents: 20_00 },
+  ];
+
+  it("feeForPrice escolhe a faixa (inclusiva/aberta)", () => {
+    expect(feeForPrice(7_999, shopee).commissionBps).toBe(2000);
+    expect(feeForPrice(8_000, shopee).commissionBps).toBe(1400);
+    expect(feeForPrice(9_999, shopee).fixedCents).toBe(4_00);
+    expect(feeForPrice(50_000, shopee).fixedCents).toBe(20_00); // aberto acima
+  });
+
+  it("feeForPrice erra sem faixa aplicável / preço inválido", () => {
+    expect(() => feeForPrice(-1, shopee)).toThrow(RangeError);
+    expect(() => feeForPrice(10_000, [])).toThrow(/faixa/i);
+  });
+
+  it("computeSuggestedPriceCentsByTiers itera e preserva a margem", () => {
+    // Custo R$10, margem 30%, faixa 20% + R$4 → (10+4)/(1−0,20−0,30) = 28,00
+    const p = computeSuggestedPriceCentsByTiers(10_00, 3000, [
+      { minCents: 0, maxCents: null, commissionBps: 2000, fixedCents: 4_00 },
+    ]);
+    expect(p).toBe(28_00);
+  });
+
+  it("erro quando comissão + margem ≥ 100%", () => {
+    expect(() =>
+      computeSuggestedPriceCentsByTiers(10_00, 9000, [
+        { minCents: 0, maxCents: null, commissionBps: 2000, fixedCents: 0 },
+      ]),
+    ).toThrow(RangeError);
+  });
+
+  it("erro quando não há faixas", () => {
+    expect(() => computeSuggestedPriceCentsByTiers(10_00, 3000, [])).toThrow(/faixa/i);
   });
 });

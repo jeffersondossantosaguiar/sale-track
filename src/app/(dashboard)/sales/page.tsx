@@ -3,6 +3,7 @@ import { byChannelSummary, listSales, monthlyGross } from "@/lib/sales/service";
 import type { Metadata } from "next";
 import XmlImportForm from "./import-form";
 import PresentialPanel from "./presential";
+import ReportImportForm from "./report-import-form";
 import TaxesPanel from "./taxes-panel";
 
 export const metadata: Metadata = {
@@ -25,6 +26,7 @@ export default function SalesPage() {
         </p>
       </div>
       <XmlImportForm />
+      <ReportImportForm />
       <PresentialPanel initialMonthTotal={monthTotal} initialMonth={month} variants={variants} />
       <TaxesPanel initialSales={sales} initialByChannel={byChannelSummary()} />
     </div>

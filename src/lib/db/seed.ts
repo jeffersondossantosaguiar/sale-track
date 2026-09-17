@@ -1,8 +1,9 @@
 import { DEFAULT_CATEGORIES } from "@/lib/domain/catalog";
+import { DEFAULT_FEE_TIERS } from "@/lib/domain/fees";
 import { eq } from "drizzle-orm";
 import { getDb } from "./client";
 import { runMigrations } from "./migrate";
-import { categories } from "./schema";
+import { categories, channelFeeTiers } from "./schema";
 import { getSetting, setSetting } from "./settings";
 
 /**
@@ -30,9 +31,24 @@ function seedCategories(): void {
   }
 }
 
+/** Faixas de taxa padrão por canal (005) — idempotente, substitui o conjunto do canal. */
+function seedFeeTiers(): void {
+  const { db } = getDb();
+  for (const [channel, tiers] of Object.entries(DEFAULT_FEE_TIERS)) {
+    db.delete(channelFeeTiers).where(eq(channelFeeTiers.channel, channel)).run();
+    const now = new Date();
+    for (const tier of tiers) {
+      db.insert(channelFeeTiers)
+        .values({ channel, ...tier, createdAt: now, updatedAt: now })
+        .run();
+    }
+  }
+}
+
 export function seedDb(dbPath?: string): void {
   runMigrations(dbPath);
   seedCategories();
+  seedFeeTiers();
   for (const [key, value] of Object.entries(SEED_CONFIG)) {
     if (getSetting(key) === null) setSetting(key, value);
   }
