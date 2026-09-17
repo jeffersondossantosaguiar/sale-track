@@ -37,6 +37,7 @@ import {
   listUnlinkedGroups,
   listVariantPrices,
   listVariants,
+  recalcAllCosts,
   removeAccessory,
   renameCategory as renameCategoryService,
   setProductActive as setProductActiveService,
@@ -371,7 +372,10 @@ export async function setGlobalParams(formData: FormData): Promise<ActionResult<
   if (formData.has("hoursPerWeek")) setNumberSetting("hours_per_week", Number(formData.get("hoursPerWeek")), { db });
   if (formData.has("laborCostPerHourCents"))
     setNumberSetting("labor_cost_per_hour_cents", Number(formData.get("laborCostPerHourCents")), { db });
+  // Parâmetros globais alimentam energia/máquina/mão de obra: recalc tudo (004/US2).
+  recalcAllCosts(db);
   revalidatePath("/settings/pricing");
+  revalidatePath("/products");
   return actionData({ saved: true });
 }
 

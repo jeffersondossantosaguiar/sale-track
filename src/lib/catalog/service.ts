@@ -32,7 +32,11 @@ import {
 } from "@/lib/domain/catalog";
 import { computeVariantCost } from "@/lib/domain/cost";
 import { computeSuggestedPriceCents } from "@/lib/domain/pricing";
-import { type PrinterInput as PrinterDomainInput, globalMachineCostPerHour } from "@/lib/domain/printer";
+import {
+  type PrinterInput as PrinterDomainInput,
+  globalEnergyPerHour,
+  globalMachinePerHour,
+} from "@/lib/domain/printer";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getNumberSetting } from "../db/settings";
 
@@ -756,7 +760,11 @@ export function recomputeVariantCost(db: Db, variantId: number): number {
       .from(variantAccessories)
       .where(eq(variantAccessories.variantId, variantId))
       .get()?.sum ?? 0;
-  const globalMachine = globalMachineCostPerHour(activePrinters(db), {
+  const globalEnergy = globalEnergyPerHour(activePrinters(db), {
+    kwhRateCents: getNumberSetting("kwh_rate_cents", 0, { db }),
+    hoursPerWeek: getNumberSetting("hours_per_week", 0, { db }),
+  });
+  const globalMachine = globalMachinePerHour(activePrinters(db), {
     kwhRateCents: getNumberSetting("kwh_rate_cents", 0, { db }),
     hoursPerWeek: getNumberSetting("hours_per_week", 0, { db }),
   });
@@ -770,6 +778,7 @@ export function recomputeVariantCost(db: Db, variantId: number): number {
       packagingCents: v.packagingCents,
       accessoriesCents: accessories,
     },
+    globalEnergy,
     globalMachine,
     { laborCostPerHourCents: laborPerHour },
   );
@@ -783,7 +792,8 @@ export function recomputeVariantCost(db: Db, variantId: number): number {
 
 export type CostBreakdownRow = {
   filamentCents: number;
-  energyMachineCents: number;
+  energyCents: number;
+  machineCents: number;
   laborCents: number;
   packagingCents: number;
   accessoriesCents: number;
@@ -806,7 +816,8 @@ export function getVariantCostBreakdown(db: Db, variantId: number): CostBreakdow
     .get();
   const empty: CostBreakdownRow = {
     filamentCents: 0,
-    energyMachineCents: 0,
+    energyCents: 0,
+    machineCents: 0,
     laborCents: 0,
     packagingCents: 0,
     accessoriesCents: 0,
@@ -819,7 +830,11 @@ export function getVariantCostBreakdown(db: Db, variantId: number): CostBreakdow
       .from(variantAccessories)
       .where(eq(variantAccessories.variantId, variantId))
       .get()?.sum ?? 0;
-  const globalMachine = globalMachineCostPerHour(activePrinters(db), {
+  const globalEnergy = globalEnergyPerHour(activePrinters(db), {
+    kwhRateCents: getNumberSetting("kwh_rate_cents", 0, { db }),
+    hoursPerWeek: getNumberSetting("hours_per_week", 0, { db }),
+  });
+  const globalMachine = globalMachinePerHour(activePrinters(db), {
     kwhRateCents: getNumberSetting("kwh_rate_cents", 0, { db }),
     hoursPerWeek: getNumberSetting("hours_per_week", 0, { db }),
   });
@@ -833,6 +848,7 @@ export function getVariantCostBreakdown(db: Db, variantId: number): CostBreakdow
       packagingCents: v.packagingCents,
       accessoriesCents: accessories,
     },
+    globalEnergy,
     globalMachine,
     { laborCostPerHourCents: laborPerHour },
   );

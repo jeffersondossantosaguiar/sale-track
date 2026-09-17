@@ -24,11 +24,12 @@
 - **Invoice** — incorporado à Sale: número, série, data, total, XML original salvo. **Deduplicação por nº da nota.**
 
 ## Custo, margem e precificação (motor de custo)
-- **Motor de custo da variante:** `custo = filamento + energia+máquina + mão de obra + embalagem + acessórios`, detalhado por linha (mão de obra destacada).
+- **Motor de custo da variante:** `custo = filamento + energia + máquina + mão de obra + embalagem + acessórios`, detalhado por linha (mão de obra destacada).
   - filamento = `peso(g)/1000 × R$/kg do material` (peso = filamento gasto).
-  - energia+máquina = `tempo_impressão × R$/hora global` (impressora **mais cara** ativa).
-  - mão de obra = `(tempo_impressão + tempo manual) × R$/hora`.
-- **Preço sugerido por canal** = `(custo + taxa_fixa) / (1 − taxa% − margem%)`. **Preço praticado** é decisão do dono e fica **congelado** (o sugerido é só ajuda; mudanças de custo/margem/taxa não o alteram).
+  - energia = `tempo_impressão × energia/h global` (impressora **mais cara** ativa × `kW × R$/kWh`).
+  - máquina = `tempo_impressão × máquina/h global` (depreciação + manutenção da impressora mais cara).
+  - mão de obra = `tempo MANUAL × R$/hora` — **o tempo de impressão NÃO conta** (é trabalho da máquina; 004).
+- **Preço sugerido por canal** = `(custo + taxa_fixa) / (1 − taxa% − margem%)`. **Preço praticado** é decisão do dono e fica **congelado** (o sugerido é só ajuda; mudanças de custo/margem/taxa não o alteram). A taxa % do canal é gravada como **basis points** (`% × 100`).
 - **Custo congelado na venda:** cada venda guarda o custo vigente da **variante** *no dia da venda* — alterar custo/preço do cadastro **não muda** margens históricas (a NFe também não pode ser alterada).
 - Botão **"aplicar custo atual às vendas sem custo"**: preenche só vendas que nunca tiveram custo e nunca toca nas já definidas.
 

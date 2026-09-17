@@ -27,4 +27,12 @@ export function normalizeBps(raw: string | number | null | undefined): number {
   return Math.min(Math.max(Math.round(value), 0), MAX_FEE_BPS);
 }
 
+/**
+ * Percentual → basis points (004). O painel envia a taxa como percentual
+ * (ex.: 20 = 20%); a settings grava bps (ex.: 2000). Normaliza e limita a 0..100%.
+ */
+export function percentToBps(percent: number): number {
+  return normalizeBps(percent * 100);
+}
+
 export const FEE_CHANNELS: Channel[] = ["shopee", "tiktok", "presencial"];

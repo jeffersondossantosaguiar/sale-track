@@ -3,6 +3,7 @@ import type { Db } from "@/lib/db/client";
 import { variants } from "@/lib/db/schema";
 import { getNumberSetting, setNumberSetting } from "@/lib/db/settings";
 import { feeFromBps, marginOf, netOf } from "@/lib/domain/cxmoney";
+import { percentToBps } from "@/lib/domain/fees";
 import { byChannelSummary, getChannelFeeBps, setSaleFee } from "@/lib/sales/service";
 import { importNfeToDb } from "@/lib/xml/importer";
 import { eq } from "drizzle-orm";
@@ -43,6 +44,20 @@ function importNf(db: Db, invoiceNumber: string, cProd: string, grossCents: numb
     { db },
   );
 }
+
+describe("fees.domain — percentual → bps (004/US3)", () => {
+  it("20% → 2000bps; 16% → 1600bps", () => {
+    expect(percentToBps(20)).toBe(2000);
+    expect(percentToBps(16)).toBe(1600);
+  });
+
+  it("fraciona e limita a 0..100%", () => {
+    expect(percentToBps(0.5)).toBe(50);
+    expect(percentToBps(0)).toBe(0);
+    expect(percentToBps(150)).toBe(10000);
+    expect(percentToBps(-5)).toBe(0);
+  });
+});
 
 describe("service sales — taxas por venda (T040)", () => {
   it("setSaleFee recalcula taxa/líquido/margem sem mutar o bruto do faturamento", () => {

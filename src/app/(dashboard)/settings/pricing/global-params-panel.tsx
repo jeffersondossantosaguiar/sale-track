@@ -5,13 +5,24 @@ import { useState, useTransition } from "react";
 
 /**
  * FR-007 — Parâmetros globais do motor de custo (energia, horas/semana, mão de
- * obra). Extraído do antigo pricing-settings-panel em Produtos.
+ * obra). 004/US2: recebe os valores salvos via props (`initial`) e inicializa o
+ * estado com eles — não zera mais no refresh.
  */
 
-export default function GlobalParamsPanel() {
-  const [kwh, setKwh] = useState("");
-  const [hours, setHours] = useState("");
-  const [labor, setLabor] = useState("");
+type GlobalParams = {
+  kwhRateCents: number;
+  hoursPerWeek: number;
+  laborCostPerHourCents: number;
+};
+
+function toBRLInput(cents: number): string {
+  return (cents / 100).toFixed(2).replace(".", ",");
+}
+
+export default function GlobalParamsPanel({ initial }: { initial: GlobalParams }) {
+  const [kwh, setKwh] = useState(toBRLInput(initial.kwhRateCents));
+  const [hours, setHours] = useState(String(initial.hoursPerWeek));
+  const [labor, setLabor] = useState(toBRLInput(initial.laborCostPerHourCents));
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -36,7 +47,7 @@ export default function GlobalParamsPanel() {
           value={kwh}
           onChange={(e) => setKwh(e.target.value)}
           inputMode="decimal"
-          placeholder="0,90"
+          placeholder="0,88"
           className="mt-0.5 w-full rounded-md border bg-background px-2 py-1 text-sm"
         />
       </label>
@@ -56,7 +67,7 @@ export default function GlobalParamsPanel() {
           value={labor}
           onChange={(e) => setLabor(e.target.value)}
           inputMode="decimal"
-          placeholder="0,00"
+          placeholder="12,89"
           className="mt-0.5 w-full rounded-md border bg-background px-2 py-1 text-sm"
         />
       </label>

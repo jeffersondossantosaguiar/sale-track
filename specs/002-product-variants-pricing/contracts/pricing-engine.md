@@ -1,8 +1,12 @@
 # Contrato do Motor de Custo e Precificação (sale-track)
 
-Parte dos contratos da feature `002-product-variants-pricing`. Define o **cálculo** que o motor de
-custo/preço entrega — o contrato entre o domínio de custo e o resto da aplicação. É o coração da
-precificação e deve ser coberto por testes unitários (constitution §III).
+Parte dos contratos das features `002-product-variants-pricing` e
+`004-cost-pricing-corrections`. Define o **cálculo** que o motor de custo/preço entrega — o contrato
+entre o domínio de custo e o resto da aplicação. É o coração da precificação e deve ser coberto por
+testes unitários (constitution §III).
+
+> ⚠️ **Atualizado na feature 004**: a mão de obra passou a usar **só tempo manual** e o detalhamento
+> separou **Energia** de **Máquina**. Aplicável a partir da 004.
 
 > Dinheiro em **centavos inteiros**; percentuais como `Bps` inteiros (0..10000 = 0%..100%).
 
@@ -27,26 +31,35 @@ precificação e deve ser coberto por testes unitários (constitution §III).
 
 ## Cálculo
 
-### 1. Custo por hora da impressora (`machineCostPerHourCents`)
+### 1. Custo por hora da impressora (derivação global)
+
 ```
 hoursPerYear   = hoursPerWeek × 52
-deprPerHour    = acquisitionCents / (usefulLifeYears × hoursPerYear)   // arredondar
-energyPerHour  = (powerWatts / 1000) × kwhRateCents
-costPerHour    = deprPerHour + energyPerHour + maintenanceCentsPerHour
+deprPerHour    = round(acquisitionCents / (usefulLifeYears × hoursPerYear))
+energyPerHour  = round((powerWatts / 1000) × kwhRateCents)
+maintenancePerHour = maintenanceCentsPerHour
+machinePerHour = deprPerHour + maintenancePerHour          // depreciação + manutenção (Máquina)
+globalEnergyPerHour  = maior energyPerHour entre impressoras ativas
+globalMachinePerHour = maior machinePerHour entre impressoras ativas
 ```
-O `R$/hora global` = **maior** `costPerHour` entre as impressoras ativas.
+
+> **004**: energia e máquina são derivadas **separadamente** (cada uma usa o maior valor entre as
+> impressoras ativas), e não mais combinadas num único `R$/hora global`.
 
 ### 2. Custo da variante (`costCents`)
 ```
 filamentCents        = round(filamentGrams / 1000 × pricePerKgCents)
-energyMachineCents   = round(printTimeMin / 60 × globalMachineCostPerHourCents)
-laborCents           = round((printTimeMin + manualTimeMin) / 60 × laborCostPerHourCents)
+energyCents          = round(printTimeMin / 60 × globalEnergyPerHour)
+machineCents         = round(printTimeMin / 60 × globalMachinePerHour)
+laborCents           = round(manualTimeMin / 60 × laborCostPerHourCents)   // SÓ tempo manual (004)
 packagingCents       = packagingCents
 accessoriesCents     = sum(accessory.costCents)
 
-costCents = filamentCents + energyMachineCents + laborCents + packagingCents + accessoriesCents
+costCents = filamentCents + energyCents + machineCents + laborCents + packagingCents + accessoriesCents
 ```
-> Detalhamento por linha, com `laborCents` destacada separadamente (não é escondida).
+> Detalhamento por linha: **Filamento, Energia, Máquina, Mão de obra** (destacada), **Embalagem,
+> Acessórios**. `laborCents` usa apenas o tempo manual — o tempo de impressão é trabalho da máquina
+> (004).
 
 ### 3. Preço sugerido por canal (`suggestedPriceCents`)
 ```
@@ -67,11 +80,12 @@ profitBps         = round(profitCents / practicedPriceCents × 10000)   // 0 se 
 
 ## Regras de negócio (borda)
 1. `costCents` é **cache**: recomputa quando material, parâmetros globais ou tempos mudam; nunca é
-   digitado à mão.
+   digitado à mão. Alterar parâmetro global ou impressora dispara `recalcAllCosts`.
 2. `practicedPriceCents` é intocável pelo motor (imutabilidade do preço decidido).
 3. Filamento usa peso = filamento gasto (um único campo).
 4. Kit = variante normal; custo montado manualmente (sem BOM nesta versão).
 5. Todo valor é inteiro em centavos; arredondamentos feitos explicitamente, nunca silenciosos.
+6. **Taxa % do canal** é salva como **basis points** (`% × 100`); `channel_fee_bps_*` é sempre bps.
 
 ## Validação (exemplo do dono)
 - Custo R$ 10, taxa fixa R$ 2, taxa % 10%, margem 40% → `(10 + 2) / (1 − 0,10 − 0,40)` = R$ 24.

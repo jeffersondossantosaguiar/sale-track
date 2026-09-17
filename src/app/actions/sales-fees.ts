@@ -3,7 +3,7 @@
 import { type ActionResult, actionData, actionError } from "@/lib/actions";
 import { getDb } from "@/lib/db/client";
 import { getNumberSetting, setNumberSetting } from "@/lib/db/settings";
-import { FEE_CHANNELS, channelFeeFixedSettingKey, channelFeeSettingKey, normalizeBps } from "@/lib/domain/fees";
+import { FEE_CHANNELS, channelFeeFixedSettingKey, channelFeeSettingKey, percentToBps } from "@/lib/domain/fees";
 import {
   type ChannelSummaryRow,
   type SaleRow,
@@ -53,7 +53,9 @@ export async function setSaleFeeFrom(formData: FormData): Promise<ActionResult<F
 export async function setChannelFeeFrom(formData: FormData): Promise<ActionResult<FeesState>> {
   const db = getDb().db;
   const channel = String(formData.get("channel")) as Channel;
-  const bps = normalizeBps(Number(formData.get("bps")));
+  // O painel envia o PERCENTUAL (ex.: 20 = 20%); grava como basis points (×100).
+  const percent = Number(formData.get("bps")) || 0;
+  const bps = percentToBps(percent);
   setNumberSetting(channelFeeSettingKey(channel), bps, { db });
   const fixed = Number(formData.get("fixedCents")) || 0;
   setNumberSetting(channelFeeFixedSettingKey(channel), Math.max(0, Math.round(fixed)), { db });

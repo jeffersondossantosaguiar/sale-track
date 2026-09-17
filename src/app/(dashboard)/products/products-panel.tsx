@@ -25,7 +25,8 @@ type VariantEditor = { variantId: number } | null;
 
 type CostBreakdown = {
   filamentCents: number;
-  energyMachineCents: number;
+  energyCents: number;
+  machineCents: number;
   laborCents: number;
   packagingCents: number;
   accessoriesCents: number;
@@ -558,7 +559,8 @@ function CostBreakdownBox({ breakdown }: { breakdown: CostBreakdown | null }) {
   if (!breakdown) return null;
   const rows: Array<{ label: string; cents: number; highlight?: boolean }> = [
     { label: "Filamento", cents: breakdown.filamentCents },
-    { label: "Energia + máquina", cents: breakdown.energyMachineCents },
+    { label: "Energia", cents: breakdown.energyCents },
+    { label: "Máquina", cents: breakdown.machineCents },
     { label: "Mão de obra", cents: breakdown.laborCents, highlight: true },
     { label: "Embalagem", cents: breakdown.packagingCents },
     { label: "Acessórios", cents: breakdown.accessoriesCents },
