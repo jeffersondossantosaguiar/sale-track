@@ -3,7 +3,6 @@ import { CASH_CATEGORY_LABELS } from "@/lib/domain/cash";
 import { formatBRL } from "@/lib/domain/money";
 import type { Metadata } from "next";
 import MonthPicker from "./month-picker";
-import TetoForm from "./teto-form";
 
 /**
  * T042 — Dashboard mensal/anual: faturamento do mês e do ano, % do teto MEI
@@ -63,10 +62,7 @@ export default async function DashboardPage({
       </div>
 
       <div className="rounded-lg border bg-card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm font-semibold">Teto anual MEI</p>
-          <TetoForm initialCents={stats.meiLimitCents} />
-        </div>
+        <p className="text-sm font-semibold">Teto anual MEI</p>
         <div className="mt-3 space-y-1">
           <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
             <div className={`h-full rounded-full ${over ? "bg-red-500" : "bg-primary"}`} style={{ width: `${pct}%` }} />

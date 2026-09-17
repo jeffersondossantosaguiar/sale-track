@@ -43,8 +43,10 @@
 - Faturamento do mês = NF importadas + presencial − estornos.
 
 ## Telas / relatórios
-- **Dashboard:** faturamento do mês + barra de % do teto MEI no ano; caixa (entradas, saídas, saldo); gastos por categoria; vendas por canal (bruto / taxas / líquido); vendas recentes.
-- **Produtos** (catálogo manual + códigos por canal), **Vendas** (importadas + manuais + estornar + taxa editável), **Caixa**, **Códigos sem vínculo**, **Importar XML**, **Configurações** (teto MEI, % taxa por canal), **Extrato mensal exportável** (base para DASN).
+- **Dashboard:** faturamento do mês + barra de % do teto MEI no ano (leitura); caixa (entradas, saídas, saldo); gastos por categoria; vendas por canal (bruto / taxas / líquido); vendas recentes.
+- **Navegação:** menu lateral (sidebar) fixo em desktop e drawer/hambúrguer em telas pequenas, com item expansível **Configurações**.
+- **Produtos** (catálogo manual + códigos por canal), **Vendas** (importadas + manuais + estornar + taxa editável), **Caixa**, **Códigos sem vínculo**, **Importar XML**, **Extrato mensal exportável** (base para DASN).
+- **Configurações** (`/settings`, menu lateral): **Precificação** (`/settings/pricing` — parâmetros globais de energia/horas/mão de obra + materiais), **Impressoras** (`/settings/printers`), **Taxas por canal** (`/settings/sales-channels` — taxa padrão % + fixa) e **Teto MEI** (`/settings/mei` — edição; Dashboard mostra apenas o progresso).
 
 ## Stack / operação
 - **Next.js fullstack** (App Router + Server Actions) + **SQLite** (Drizzle + better-sqlite3) + **Tailwind + ShadCN + Biome**, **Node LTS**.

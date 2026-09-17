@@ -58,7 +58,7 @@ export async function setChannelFeeFrom(formData: FormData): Promise<ActionResul
   const fixed = Number(formData.get("fixedCents")) || 0;
   setNumberSetting(channelFeeFixedSettingKey(channel), Math.max(0, Math.round(fixed)), { db });
   revalidatePath("/sales");
-  revalidatePath("/products");
+  revalidatePath("/settings/sales-channels");
   return feesState();
 }
 

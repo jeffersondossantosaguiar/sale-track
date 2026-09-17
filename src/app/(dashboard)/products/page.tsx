@@ -2,13 +2,11 @@ import {
   listAllVariants,
   listCategories,
   listMaterials,
-  listPrinters,
   listProducts,
   listUnlinkedGroups,
 } from "@/lib/catalog/service";
 import type { Metadata } from "next";
 import CategoriesPanel from "./categories-panel";
-import PricingSettingsPanel from "./pricing-settings-panel";
 import ProductsPanel from "./products-panel";
 import UnlinkedPanel from "./unlinked-panel";
 
@@ -35,7 +33,6 @@ export default function ProductsPage() {
 
       <CategoriesPanel initialCategories={categories} />
       <ProductsPanel initialProducts={products} categories={categories} materials={materials} />
-      <PricingSettingsPanel initialMaterials={materials} initialPrinters={listPrinters()} />
       <UnlinkedPanel initialGroups={unlinked} variants={variants} />
     </div>
   );

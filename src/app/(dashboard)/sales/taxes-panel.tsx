@@ -1,6 +1,6 @@
 "use client";
 
-import { type FeesState, reverseSaleFrom, setChannelFeeFrom, setSaleFeeFrom } from "@/app/actions/sales-fees";
+import { type FeesState, reverseSaleFrom, setSaleFeeFrom } from "@/app/actions/sales-fees";
 import { MAX_FEE_BPS } from "@/lib/domain/fees";
 import { formatBRL } from "@/lib/domain/money";
 import type { ChannelSummaryRow, SaleRow } from "@/lib/sales/service";
@@ -23,18 +23,14 @@ const CANAL_LABEL: Record<Channel, string> = {
 export default function TaxesPanel({
   initialSales,
   initialByChannel,
-  initialChannelFees,
-  initialChannelFeesFixed,
 }: {
   initialSales: SaleRow[];
   initialByChannel: ChannelSummaryRow[];
-  initialChannelFees: Record<Channel, number>;
-  initialChannelFeesFixed: Record<Channel, number>;
 }) {
   const [fees, setFees] = useState<FeesState>({
     sales: initialSales,
     byChannel: initialByChannel,
-    channelFees: initialChannelFees,
+    channelFees: { shopee: 0, tiktok: 0, presencial: 0 },
     channelFixedFees: { shopee: 0, tiktok: 0, presencial: 0 },
   });
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -43,27 +39,14 @@ export default function TaxesPanel({
 
   // irmãos (ex.: venda presencial) atualizam via router.refresh() → props novas
   useEffect(() => {
-    setFees({
+    setFees((prev) => ({
+      ...prev,
       sales: initialSales,
       byChannel: initialByChannel,
-      channelFees: initialChannelFees,
-      channelFixedFees: initialChannelFeesFixed,
-    });
-  }, [initialSales, initialByChannel, initialChannelFees, initialChannelFeesFixed]);
-
-  const channelDraft = (channel: Channel, bps: number): string => drafts[`channel:${channel}`] ?? inputBps(bps);
-
-  const fixedDraft = (channel: Channel, cents: number): string => drafts[`fixed:${channel}`] ?? toBRL(cents);
+    }));
+  }, [initialSales, initialByChannel]);
 
   const saleDraft = (saleId: number, bps: number): string => drafts[`sale:${saleId}`] ?? inputBps(bps);
-
-  const applyChannel = (channel: Channel) => {
-    const form = new FormData();
-    form.set("channel", channel);
-    form.set("bps", channelDraft(channel, fees.channelFees[channel] ?? 0));
-    form.set("fixedCents", String(centsOf(fixedDraft(channel, fees.channelFixedFees[channel] ?? 0))));
-    startTransition(async () => apply(await setChannelFeeFrom(form)));
-  };
 
   const applySale = (saleId: number, current: number) => {
     const form = new FormData();
@@ -97,54 +80,6 @@ export default function TaxesPanel({
 
   return (
     <section className="space-y-4">
-      <div className="rounded-lg border bg-card p-4">
-        <h2 className="text-sm font-semibold">Taxa padrão por canal</h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          A % e a taxa fixa configuradas viram a taxa inicial das próximas vendas importadas do canal (editável em cada
-          venda abaixo).
-        </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          {(Object.keys(CANAL_LABEL) as Channel[]).map((channel) => (
-            <div key={channel} className="rounded-md border bg-background p-2">
-              <span className="text-xs text-muted-foreground">{CANAL_LABEL[channel]}</span>
-              <div className="mt-1 flex items-center gap-2">
-                <label className="block">
-                  <span className="text-[10px] text-muted-foreground">%</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={MAX_FEE_BPS / 100}
-                    step={0.1}
-                    value={channelDraft(channel, fees.channelFees[channel] ?? 0)}
-                    onChange={(event) => setDrafts((prev) => ({ ...prev, [`channel:${channel}`]: event.target.value }))}
-                    className="w-20 rounded-md border bg-background px-2 py-1 text-sm"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-[10px] text-muted-foreground">Fixa (R$)</span>
-                  <input
-                    value={fixedDraft(channel, fees.channelFixedFees[channel] ?? 0)}
-                    onChange={(event) => setDrafts((prev) => ({ ...prev, [`fixed:${channel}`]: event.target.value }))}
-                    inputMode="decimal"
-                    placeholder="0,00"
-                    className="w-20 rounded-md border bg-background px-2 py-1 text-sm"
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => applyChannel(channel)}
-                  disabled={pending}
-                  className="mt-3 rounded-md border px-2 py-1 text-xs text-muted-foreground disabled:opacity-50"
-                >
-                  Aplicar
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-        {message && <p className="mt-2 text-xs text-red-600">{message}</p>}
-      </div>
-
       <div className="rounded-lg border bg-card p-4">
         <h2 className="text-sm font-semibold">Resumo por canal</h2>
         <div className="mt-3 overflow-auto">

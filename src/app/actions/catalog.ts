@@ -220,6 +220,7 @@ export async function createMaterial(formData: FormData): Promise<ActionResult<{
     { db },
   );
   if (!result.ok) return actionError(result.error);
+  revalidatePath("/settings/pricing");
   revalidatePath("/products");
   return actionData({ materials: listMaterials({ db }) });
 }
@@ -231,6 +232,7 @@ export async function updateMaterial(formData: FormData): Promise<ActionResult<{
   if (formData.has("pricePerKgCents")) patch.pricePerKgCents = Number(formData.get("pricePerKgCents"));
   const result = updateMaterialService(Number(formData.get("id")), patch, { db });
   if (!result.ok) return actionError(result.error);
+  revalidatePath("/settings/pricing");
   revalidatePath("/products");
   return actionData({ materials: listMaterials({ db }) });
 }
@@ -239,6 +241,7 @@ export async function deleteMaterial(formData: FormData): Promise<ActionResult<{
   const db = getDb().db;
   const result = deleteMaterialService(Number(formData.get("id")), { db });
   if (!result.ok) return actionError(result.error);
+  revalidatePath("/settings/pricing");
   revalidatePath("/products");
   return actionData({ materials: listMaterials({ db }) });
 }
@@ -330,6 +333,7 @@ export async function createPrinter(formData: FormData): Promise<ActionResult<{ 
     { db },
   );
   if (!result.ok) return actionError(result.error);
+  revalidatePath("/settings/printers");
   revalidatePath("/products");
   return actionData({ printers: listPrinters({ db }) });
 }
@@ -345,6 +349,7 @@ export async function updatePrinter(formData: FormData): Promise<ActionResult<{ 
     patch.maintenanceCentsPerHour = Number(formData.get("maintenanceCentsPerHour"));
   const result = updatePrinterService(Number(formData.get("id")), patch, { db });
   if (!result.ok) return actionError(result.error);
+  revalidatePath("/settings/printers");
   revalidatePath("/products");
   return actionData({ printers: listPrinters({ db }) });
 }
@@ -353,6 +358,7 @@ export async function deletePrinter(formData: FormData): Promise<ActionResult<{ 
   const db = getDb().db;
   const result = deletePrinterService(Number(formData.get("id")), { db });
   if (!result.ok) return actionError(result.error);
+  revalidatePath("/settings/printers");
   revalidatePath("/products");
   return actionData({ printers: listPrinters({ db }) });
 }
@@ -365,7 +371,7 @@ export async function setGlobalParams(formData: FormData): Promise<ActionResult<
   if (formData.has("hoursPerWeek")) setNumberSetting("hours_per_week", Number(formData.get("hoursPerWeek")), { db });
   if (formData.has("laborCostPerHourCents"))
     setNumberSetting("labor_cost_per_hour_cents", Number(formData.get("laborCostPerHourCents")), { db });
-  revalidatePath("/products");
+  revalidatePath("/settings/pricing");
   return actionData({ saved: true });
 }
 
