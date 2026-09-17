@@ -20,15 +20,19 @@ export default function MonthPicker({ value }: { value: string }) {
       }}
       className="flex items-center gap-2 text-sm"
     >
+      <label className="sr-only" htmlFor="dashboard-month">
+        Mês exibido
+      </label>
       <input
+        id="dashboard-month"
         type="month"
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
-        className="rounded-md border bg-background px-3 py-1.5 text-sm"
+        className="h-10 rounded-full border bg-card px-4 text-sm shadow-sm"
       />
       <button
         type="submit"
-        className="rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+        className="h-10 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
         Ver
       </button>
