@@ -1,4 +1,5 @@
 import { listAllVariants } from "@/lib/catalog/service";
+import { getSerieChannelMap } from "@/lib/db/settings";
 import { byChannelSummary, listSales, monthlyGross } from "@/lib/sales/service";
 import type { Metadata } from "next";
 import XmlImportForm from "./import-form";
@@ -13,6 +14,7 @@ export const metadata: Metadata = {
 export default function SalesPage() {
   const sales = listSales();
   const variants = listAllVariants();
+  const serieChannelMap = getSerieChannelMap();
   const now = new Date();
   const month = { year: now.getFullYear(), month: now.getMonth() + 1 };
   const monthTotal = monthlyGross(month);
@@ -25,7 +27,7 @@ export default function SalesPage() {
           faturamento do mês e do teto MEI (a presencial também entra no caixa).
         </p>
       </div>
-      <XmlImportForm />
+      <XmlImportForm initialSerieChannelMap={serieChannelMap} />
       <ReportImportForm />
       <PresentialPanel initialMonthTotal={monthTotal} initialMonth={month} variants={variants} />
       <TaxesPanel initialSales={sales} initialByChannel={byChannelSummary()} />

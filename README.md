@@ -34,7 +34,8 @@ exportados (Shopee: relatório de saldo; TikTok: income, aba "Detalhes do pedido
 
 - Margem **unificada por produto** (campo livre, % do preço bruto).
 - Taxa de cada canal = **tabela de faixas** (comissão% + fixa por valor do item), editável em
-  Configurações → Taxas por canal (texto → linhas estruturadas). Sem subsídio (decisão do dono).
+  Configurações → Canais (texto → linhas estruturadas). Sem subsídio (decisão do dono).
+- A identificação do canal na importação usa a **série da NFe** (configurável em Configurações → Canais).
 - **Preço sugerido** por canal = iteração sobre as faixas; **praticado** fica congelado (promoção/desconto).
 
 ## Notas e melhorias pendentes

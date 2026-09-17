@@ -13,6 +13,6 @@ export const TOP_NAV: NavItem[] = [
 export const SETTINGS_NAV: NavItem[] = [
   { href: "/settings/pricing", label: "Precificação" },
   { href: "/settings/printers", label: "Impressoras" },
-  { href: "/settings/sales-channels", label: "Taxas por canal" },
+  { href: "/settings/channels", label: "Canais" },
   { href: "/settings/mei", label: "Teto MEI" },
 ];

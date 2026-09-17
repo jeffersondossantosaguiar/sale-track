@@ -39,7 +39,7 @@
 
 ## Importação de XML
 - Upload **em lote** de vários XMLs de uma vez.
-- **Canal detectado pelo nome do arquivo** (Shopee: `..._invoice_file_...`; TikTok: número puro) — sugestão **editável por lote** antes de confirmar; padrão desconhecido pergunta manual.
+- **Canal identificado pela série da NFe** (configurável em Configurações → Canais; ex.: Shopee = séries 1 e 2, TikTok = série 3). Série não mapeada cai para o padrão do nome de arquivo (Shopee: `..._invoice_file_...`; TikTok: número puro); desconhecido pergunta manual — sugestão **editável por lote** antes de confirmar.
 - Itens casam com o catálogo por `cProd` + dica de canal, na granularidade de **variante**; sem vínculo cai na fila "códigos sem vínculo" para ligar à variante **uma vez** (daí aprende). Ao vincular, congela o custo da venda.
 - Faturamento do mês = NF importadas + presencial − estornos.
 
@@ -47,7 +47,7 @@
 - **Dashboard:** faturamento do mês + barra de % do teto MEI no ano (leitura); caixa (entradas, saídas, saldo); gastos por categoria; vendas por canal (bruto / taxas / líquido); vendas recentes.
 - **Navegação:** menu lateral (sidebar) fixo em desktop e drawer/hambúrguer em telas pequenas, com item expansível **Configurações**.
 - **Produtos** (catálogo manual + códigos por canal), **Vendas** (importadas + manuais + estornar + taxa editável), **Caixa**, **Códigos sem vínculo**, **Importar XML**, **Extrato mensal exportável** (base para DASN).
-- **Configurações** (`/settings`, menu lateral): **Precificação** (`/settings/pricing` — parâmetros globais de energia/horas/mão de obra + materiais), **Impressoras** (`/settings/printers`), **Taxas por canal** (`/settings/sales-channels` — taxa padrão % + fixa) e **Teto MEI** (`/settings/mei` — edição; Dashboard mostra apenas o progresso).
+- **Configurações** (`/settings`, menu lateral): **Precificação** (`/settings/pricing` — parâmetros globais de energia/horas/mão de obra + materiais), **Impressoras** (`/settings/printers`), **Canais** (`/settings/channels` — séries de emissão da NFe que identificam o canal + faixas de taxa) e **Teto MEI** (`/settings/mei` — edição; Dashboard mostra apenas o progresso).
 
 ## Stack / operação
 - **Next.js fullstack** (App Router + Server Actions) + **SQLite** (Drizzle + better-sqlite3) + **Tailwind + ShadCN + Biome**, **Node LTS**.

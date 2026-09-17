@@ -3,14 +3,17 @@
 import { type ImportBatchResponse, importXml } from "@/app/actions/xml-import";
 import { formatBRL } from "@/lib/domain/money";
 import { cn } from "@/lib/utils";
-import { CHANNEL_LABELS, type Channel, type DetectableChannel } from "@/lib/xml/channel";
+import { CHANNEL_LABELS, type Channel, type DetectableChannel, type SerieChannelMap } from "@/lib/xml/channel";
 import type { WorkerFileResult, WorkerRequest, WorkerResponse } from "@/lib/xml/worker";
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * T025 — Importação NFe XML (US1).
  * Parses no navegador (Web Worker) para preview; confirma envia o lote ao
  * Server Action, que revalida e grava (servidor é a fonte da verdade).
+ * O canal é identificado pela série da NFe (mapa configurável em Canais);
+ * série não mapeada cai para o padrão do nome do arquivo; senão, escolha manual.
  */
 
 const CHANNELS: Channel[] = ["shopee", "tiktok", "presencial"];
@@ -19,7 +22,11 @@ const MAX_BATCH_FILES = 1000;
 type PreviewRow = { file: File; result: WorkerFileResult };
 type Phase = "idle" | "parsing" | "review" | "importing" | "done";
 
-export default function XmlImportForm() {
+export default function XmlImportForm({
+  initialSerieChannelMap = {},
+}: {
+  initialSerieChannelMap?: SerieChannelMap;
+}) {
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [channels, setChannels] = useState<Record<string, Channel>>({});
   const [phase, setPhase] = useState<Phase>("idle");
@@ -46,7 +53,7 @@ export default function XmlImportForm() {
     const results = await new Promise<WorkerResponse>((resolve, reject) => {
       worker.onmessage = (event: MessageEvent<WorkerResponse>) => resolve(event.data);
       worker.onerror = () => reject(new Error("worker de parse falhou"));
-      const request: WorkerRequest = { files: [] };
+      const request: WorkerRequest = { files: [], serieChannelMap: initialSerieChannelMap };
       // Lê conteúdo em paralelo antes de postar.
       Promise.all(files.map(async (file) => ({ filename: file.name, content: await file.text() }))).then((inputs) => {
         request.files = inputs;
@@ -82,6 +89,8 @@ export default function XmlImportForm() {
     }
     const result = await importXml(form);
     setResponse(result);
+    setRows([]);
+    setChannels({});
     setPhase("done");
   };
 
@@ -101,11 +110,13 @@ export default function XmlImportForm() {
     0,
   );
 
+  const showPreview = rows.length > 0 || phase === "parsing";
+
   return (
     <div className="space-y-6">
       <section className="rounded-lg border bg-card p-4">
         <label className="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-          Selecionar XMLs (lote)
+          Importar NFe (arquivos XML)
           <input
             ref={inputRef}
             type="file"
@@ -120,11 +131,10 @@ export default function XmlImportForm() {
           Mín. 1 arquivo · máx. {MAX_BATCH_FILES} por lote · parse em Web Worker no navegador (o XML bruto também é
           enviado ao servidor para revalidar e arquivar).
         </p>
-        {phase === "parsing" && <p className="mt-2 text-sm">Parsing no navegador…</p>}
       </section>
 
-      {rows.length > 0 && (
-        <section className="rounded-lg border bg-card">
+      {showPreview && (
+        <section className="relative rounded-lg border bg-card">
           <div className="flex items-center justify-between border-b px-4 py-3">
             <h2 className="text-sm font-semibold">Prévia do lote</h2>
             <span className="text-xs text-muted-foreground">
@@ -229,7 +239,19 @@ export default function XmlImportForm() {
             </div>
           )}
 
-          {phase === "importing" && <p className="px-4 py-3 text-sm">Importando…</p>}
+          {phase === "importing" && (
+            <div className="flex items-center gap-2 border-t px-4 py-3 text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Importando…
+            </div>
+          )}
+
+          {phase === "parsing" && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg bg-card/90 text-sm">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span className="font-medium">Carregando notas…</span>
+            </div>
+          )}
         </section>
       )}
 
@@ -244,6 +266,7 @@ function ResultSummary({ response, onReset }: { response: ImportBatchResponse; o
   }
 
   const { total, imported, duplicates, errors, results } = response.data;
+  const failures = results.filter((r) => r.status === "error");
   return (
     <div className="space-y-4">
       <div className="rounded-lg border bg-card p-4 text-sm">
@@ -251,24 +274,21 @@ function ResultSummary({ response, onReset }: { response: ImportBatchResponse; o
           {imported} importada{imported === 1 ? "" : "s"} · {duplicates} já importada{duplicates === 1 ? "" : "s"} ·{" "}
           {errors} falha{errors === 1 ? "" : "s"} (de {total})
         </p>
-        <ul className="mt-3 max-h-80 divide-y divide-border overflow-auto">
-          {results.map((result) => (
-            <li key={result.filename} className="flex items-start justify-between gap-4 py-2 font-mono text-xs">
-              <span className="min-w-0 truncate">{result.filename}</span>
-              {result.status === "imported" && (
-                <span className="text-right text-emerald-600">
-                  nota {result.invoiceNumber} · {formatBRL(result.grossCents)}
-                  {result.unlinked.length > 0 &&
-                    ` · ${result.unlinked.length} item(ns) sem vínculo (${result.unlinked.map((u) => u.cProd).join(", ")})`}
-                </span>
-              )}
-              {result.status === "duplicate" && (
-                <span className="shrink-0 text-amber-600">já importado (nota {result.invoiceNumber})</span>
-              )}
-              {result.status === "error" && <span className="shrink-0 text-red-600">{result.error}</span>}
-            </li>
-          ))}
-        </ul>
+        {failures.length > 0 ? (
+          <>
+            <p className="mt-3 text-xs font-semibold uppercase text-muted-foreground">Notas que falharam</p>
+            <ul className="mt-1 max-h-80 divide-y divide-border overflow-auto">
+              {failures.map((result) => (
+                <li key={result.filename} className="flex items-start justify-between gap-4 py-2 font-mono text-xs">
+                  <span className="min-w-0 truncate">{result.filename}</span>
+                  <span className="shrink-0 text-red-600">{result.error}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="mt-2 text-green-700">Todas as notas foram importadas com sucesso.</p>
+        )}
       </div>
       <button type="button" onClick={onReset} className="rounded-md border px-4 py-2 text-sm">
         Novo lote

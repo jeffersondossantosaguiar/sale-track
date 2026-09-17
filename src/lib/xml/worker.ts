@@ -1,4 +1,9 @@
-import { type DetectableChannel, detectChannelFromFilename } from "./channel";
+import {
+  type DetectableChannel,
+  type SerieChannelMap,
+  detectChannelFromFilename,
+  detectChannelFromSerie,
+} from "./channel";
 import { type ParsedInvoice, parseXmlInvoice } from "./parser";
 
 /**
@@ -24,6 +29,7 @@ export type WorkerFileResult =
 
 export interface WorkerRequest {
   files: WorkerFileInput[];
+  serieChannelMap?: SerieChannelMap;
 }
 
 export interface WorkerResponse {
@@ -40,7 +46,7 @@ function isXml(filename: string): boolean {
 }
 
 /** Lógica pura do worker — exportada para teste unitário (T022). */
-export function handleWorkerFiles(files: WorkerFileInput[]): WorkerResponse {
+export function handleWorkerFiles(files: WorkerFileInput[], serieChannelMap: SerieChannelMap = {}): WorkerResponse {
   const results: WorkerFileResult[] = files.map(({ filename, content }) => {
     if (!isXml(filename)) return { status: "skipped", filename, reason: "not-xml" };
     const parsed = parseXmlInvoice(content);
@@ -48,7 +54,7 @@ export function handleWorkerFiles(files: WorkerFileInput[]): WorkerResponse {
     return {
       status: "ok",
       filename,
-      channel: detectChannelFromFilename(filename),
+      channel: detectChannelFromSerie(parsed.invoice.serie, serieChannelMap) ?? detectChannelFromFilename(filename),
       invoice: parsed.invoice,
     };
   });
@@ -57,6 +63,6 @@ export function handleWorkerFiles(files: WorkerFileInput[]): WorkerResponse {
 
 const scope = (typeof self !== "undefined" ? self : globalThis) as unknown as WorkerScope;
 scope.onmessage = (event: MessageEvent<WorkerRequest>) => {
-  const { files } = event.data ?? { files: [] };
-  scope.postMessage(handleWorkerFiles(files));
+  const { files, serieChannelMap } = event.data ?? { files: [] };
+  scope.postMessage(handleWorkerFiles(files, serieChannelMap));
 };

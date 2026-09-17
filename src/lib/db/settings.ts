@@ -1,3 +1,4 @@
+import type { SerieChannelMap } from "@/lib/xml/channel";
 import { eq } from "drizzle-orm";
 import { type Db, getDb } from "./client";
 import { settings } from "./schema";
@@ -45,4 +46,28 @@ export function getNumberSetting(key: string, fallback: number, opts?: { db?: Db
 /** Grava uma chave numérica (int); util para testes e actions. */
 export function setNumberSetting(key: string, value: number, opts?: { db?: Db }): void {
   setSetting(key, Number.isInteger(value) ? value : Math.round(value), opts);
+}
+
+const SERIE_CHANNEL_KEY = "nfe_serie_channel";
+
+/** Lê o mapa série→canal; vazio quando ainda não configurado. */
+export function getSerieChannelMap(opts?: { db?: Db }): SerieChannelMap {
+  const raw = getSetting(SERIE_CHANNEL_KEY, opts);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return {};
+    const map: SerieChannelMap = {};
+    for (const [serie, channel] of Object.entries(parsed)) {
+      if (channel === "shopee" || channel === "tiktok") map[serie] = channel;
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+/** Grava o mapa série→canal (upsert). */
+export function setSerieChannelMap(map: SerieChannelMap, opts?: { db?: Db }): void {
+  setSetting(SERIE_CHANNEL_KEY, JSON.stringify(map), opts);
 }

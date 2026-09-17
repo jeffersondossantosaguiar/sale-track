@@ -1,4 +1,9 @@
-import { CHANNEL_LABELS, PICKABLE_CHANNELS, detectChannelFromFilename } from "@/lib/xml/channel";
+import {
+  CHANNEL_LABELS,
+  PICKABLE_CHANNELS,
+  detectChannelFromFilename,
+  detectChannelFromSerie,
+} from "@/lib/xml/channel";
 import { describe, expect, it } from "vitest";
 
 describe("T016 — detecção de canal por padrão de nome de arquivo (D2)", () => {
@@ -32,5 +37,31 @@ describe("T016 — detecção de canal por padrão de nome de arquivo (D2)", () 
   it("mantém constantes de UI coerentes com o enum", () => {
     expect(Object.keys(CHANNEL_LABELS).sort()).toEqual(["presencial", "shopee", "tiktok"]);
     expect(PICKABLE_CHANNELS).toContain("presencial");
+  });
+});
+
+describe("detecção de canal por série da NFe (mapa configurável)", () => {
+  const map = { "1": "shopee", "2": "shopee", "3": "tiktok" } as const;
+
+  it("resolve séries mapeadas", () => {
+    expect(detectChannelFromSerie("1", map)).toBe("shopee");
+    expect(detectChannelFromSerie("2", map)).toBe("shopee");
+    expect(detectChannelFromSerie("3", map)).toBe("tiktok");
+  });
+
+  it("retorna null para série não mapeada ou vazia", () => {
+    expect(detectChannelFromSerie("9", map)).toBeNull();
+    expect(detectChannelFromSerie("", map)).toBeNull();
+  });
+
+  it("retorna null quando não há mapa", () => {
+    expect(detectChannelFromSerie("1")).toBeNull();
+    expect(detectChannelFromSerie("1", {})).toBeNull();
+  });
+
+  it("ignora chaves com canal não-detectável", () => {
+    const bad = { "1": "shopee", "2": "shopee", "3": "tiktok", "7": "presencial" } as Record<string, string>;
+    expect(detectChannelFromSerie("7", bad)).toBeNull();
+    expect(detectChannelFromSerie("1", bad)).toBe("shopee");
   });
 });

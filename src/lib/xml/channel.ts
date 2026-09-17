@@ -10,8 +10,18 @@ export type Channel = "shopee" | "tiktok" | "presencial";
 
 export type DetectableChannel = Exclude<Channel, "presencial">;
 
+/** Mapa série → canal (Shopee/TikTok) para detecção de canal na importação NFe. */
+export type SerieChannelMap = Record<string, DetectableChannel>;
+
 const SHOPEE_MARKER = "_invoice_file_";
 const TIKTOK_NUMERIC_NAME = /^\d{10,14}$/;
+
+/** Canal inferido da série da NFe via mapa configurado (ex.: Shopee=1/2, TikTok=3). */
+export function detectChannelFromSerie(serie: string, map: Record<string, string> = {}): DetectableChannel | null {
+  if (!serie) return null;
+  const channel = map[serie];
+  return channel === "shopee" || channel === "tiktok" ? channel : null;
+}
 
 /** Canal inferido do nome do arquivo, ou null quando o padrão é desconhecido. */
 export function detectChannelFromFilename(filename: string): DetectableChannel | null {
