@@ -24,15 +24,18 @@ export default function TaxesPanel({
   initialSales,
   initialByChannel,
   initialChannelFees,
+  initialChannelFeesFixed,
 }: {
   initialSales: SaleRow[];
   initialByChannel: ChannelSummaryRow[];
   initialChannelFees: Record<Channel, number>;
+  initialChannelFeesFixed: Record<Channel, number>;
 }) {
   const [fees, setFees] = useState<FeesState>({
     sales: initialSales,
     byChannel: initialByChannel,
     channelFees: initialChannelFees,
+    channelFixedFees: { shopee: 0, tiktok: 0, presencial: 0 },
   });
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -40,10 +43,17 @@ export default function TaxesPanel({
 
   // irmãos (ex.: venda presencial) atualizam via router.refresh() → props novas
   useEffect(() => {
-    setFees({ sales: initialSales, byChannel: initialByChannel, channelFees: initialChannelFees });
-  }, [initialSales, initialByChannel, initialChannelFees]);
+    setFees({
+      sales: initialSales,
+      byChannel: initialByChannel,
+      channelFees: initialChannelFees,
+      channelFixedFees: initialChannelFeesFixed,
+    });
+  }, [initialSales, initialByChannel, initialChannelFees, initialChannelFeesFixed]);
 
   const channelDraft = (channel: Channel, bps: number): string => drafts[`channel:${channel}`] ?? inputBps(bps);
+
+  const fixedDraft = (channel: Channel, cents: number): string => drafts[`fixed:${channel}`] ?? toBRL(cents);
 
   const saleDraft = (saleId: number, bps: number): string => drafts[`sale:${saleId}`] ?? inputBps(bps);
 
@@ -51,6 +61,7 @@ export default function TaxesPanel({
     const form = new FormData();
     form.set("channel", channel);
     form.set("bps", channelDraft(channel, fees.channelFees[channel] ?? 0));
+    form.set("fixedCents", String(centsOf(fixedDraft(channel, fees.channelFixedFees[channel] ?? 0))));
     startTransition(async () => apply(await setChannelFeeFrom(form)));
   };
 
@@ -89,33 +100,46 @@ export default function TaxesPanel({
       <div className="rounded-lg border bg-card p-4">
         <h2 className="text-sm font-semibold">Taxa padrão por canal</h2>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          A % configurada vira a taxa inicial das próximas vendas importadas do canal (editável em cada venda abaixo).
+          A % e a taxa fixa configuradas viram a taxa inicial das próximas vendas importadas do canal (editável em cada
+          venda abaixo).
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           {(Object.keys(CANAL_LABEL) as Channel[]).map((channel) => (
-            <label key={channel} className="block">
-              <span className="text-xs text-muted-foreground">{CANAL_LABEL[channel]} (%)</span>
+            <div key={channel} className="rounded-md border bg-background p-2">
+              <span className="text-xs text-muted-foreground">{CANAL_LABEL[channel]}</span>
               <div className="mt-1 flex items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  max={MAX_FEE_BPS / 100}
-                  step={0.1}
-                  value={channelDraft(channel, fees.channelFees[channel] ?? 0)}
-                  onChange={(event) => setDrafts((prev) => ({ ...prev, [`channel:${channel}`]: event.target.value }))}
-                  onBlur={() => applyChannel(channel)}
-                  className="w-28 rounded-md border bg-background px-3 py-1.5 text-sm"
-                />
+                <label className="block">
+                  <span className="text-[10px] text-muted-foreground">%</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={MAX_FEE_BPS / 100}
+                    step={0.1}
+                    value={channelDraft(channel, fees.channelFees[channel] ?? 0)}
+                    onChange={(event) => setDrafts((prev) => ({ ...prev, [`channel:${channel}`]: event.target.value }))}
+                    className="w-20 rounded-md border bg-background px-2 py-1 text-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] text-muted-foreground">Fixa (R$)</span>
+                  <input
+                    value={fixedDraft(channel, fees.channelFixedFees[channel] ?? 0)}
+                    onChange={(event) => setDrafts((prev) => ({ ...prev, [`fixed:${channel}`]: event.target.value }))}
+                    inputMode="decimal"
+                    placeholder="0,00"
+                    className="w-20 rounded-md border bg-background px-2 py-1 text-sm"
+                  />
+                </label>
                 <button
                   type="button"
                   onClick={() => applyChannel(channel)}
                   disabled={pending}
-                  className="rounded-md border px-2 py-1.5 text-xs text-muted-foreground disabled:opacity-50"
+                  className="mt-3 rounded-md border px-2 py-1 text-xs text-muted-foreground disabled:opacity-50"
                 >
                   Aplicar
                 </button>
               </div>
-            </label>
+            </div>
           ))}
         </div>
         {message && <p className="mt-2 text-xs text-red-600">{message}</p>}
@@ -257,6 +281,20 @@ export default function TaxesPanel({
 /** centavos de taxa em % (bps p/ input): taxa é um percentual do bruto. */
 function inputBps(bps: number): string {
   return String(bps / 100);
+}
+
+function toBRL(cents: number): string {
+  return (cents / 100).toFixed(2).replace(".", ",");
+}
+
+function centsOf(raw: string): number {
+  const cleaned = raw
+    .trim()
+    .replace(/[R$\s]/g, "")
+    .replace(".", "")
+    .replace(",", ".");
+  const value = Math.round(Number(cleaned) * 100);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 function todayIso(): string {

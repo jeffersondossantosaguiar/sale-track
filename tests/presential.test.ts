@@ -1,8 +1,10 @@
 import { listCashEntries } from "@/lib/cash/service";
-import { type ProductRow, createProduct, listProducts } from "@/lib/catalog/service";
+import { createProduct, listVariants } from "@/lib/catalog/service";
 import type { Db } from "@/lib/db/client";
+import { variants } from "@/lib/db/schema";
 import { createPresentialSale, listSales, monthlyGross } from "@/lib/sales/service";
 import { importNfeToDb } from "@/lib/xml/importer";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { setupTestDb } from "./helpers/db";
 
@@ -12,28 +14,30 @@ import { setupTestDb } from "./helpers/db";
  * tudo numa transação. Estorno dessa entrada = o estorno do caixa (voltado).
  */
 
-function mkProduct(db: Db, name: string, price: number, cost: number): ProductRow {
-  const result = createProduct({ name, categoryId: null, salePriceCents: price, estimatedCostCents: cost }, { db });
+function mkVariant(db: Db, name: string, cost: number): number {
+  const result = createProduct({ name, categoryId: null }, { db });
   if (!result.ok) throw new Error(result.error);
-  const product = listProducts({ db }).find((row) => row.name === name);
-  if (!product) throw new Error("produto não criado");
-  return product;
+  const rows = listVariants(result.value.id, { db });
+  const variant = rows[0];
+  if (!variant) throw new Error("produto sem variante default");
+  db.update(variants).set({ costCents: cost }).where(eq(variants.id, variant.id)).run();
+  return variant.id;
 }
 
 describe("service sales — venda presencial (T036/T037)", () => {
   it("cria venda presencial + itens com custo congelado + entrada no caixa (faturamento e caixa juntos)", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const a = mkProduct(db, "Busto Eiffel", 1_000, 400);
-      const b = mkProduct(db, "Chaveiro Planalto", 2_000, 900);
+      const a = mkVariant(db, "Busto Eiffel", 400);
+      const b = mkVariant(db, "Chaveiro Planalto", 900);
 
       const result = createPresentialSale(
         {
           saleDate: "2026-08-15",
           receivedCents: 3_000,
           items: [
-            { productId: a.id, quantity: 1 },
-            { productId: b.id, quantity: 1 },
+            { variantId: a, quantity: 1 },
+            { variantId: b, quantity: 1 },
           ],
         },
         { db },
@@ -67,19 +71,19 @@ describe("service sales — venda presencial (T036/T037)", () => {
   it("rejeita valor <= 0, vazio de itens, produto inexistente e data inválida", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const a = mkProduct(db, "Busto Eiffel", 1_000, 400);
+      const a = mkVariant(db, "Busto Eiffel", 400);
       const base = { saleDate: "2026-08-15" };
 
       expect(
-        createPresentialSale({ ...base, receivedCents: 0, items: [{ productId: a.id, quantity: 1 }] }, { db }).ok,
+        createPresentialSale({ ...base, receivedCents: 0, items: [{ variantId: a, quantity: 1 }] }, { db }).ok,
       ).toBe(false);
       expect(createPresentialSale({ ...base, receivedCents: 100, items: [] }, { db }).ok).toBe(false);
       expect(
-        createPresentialSale({ ...base, receivedCents: 100, items: [{ productId: 999, quantity: 1 }] }, { db }).ok,
+        createPresentialSale({ ...base, receivedCents: 100, items: [{ variantId: 999, quantity: 1 }] }, { db }).ok,
       ).toBe(false);
       expect(
         createPresentialSale(
-          { saleDate: "não-data", receivedCents: 100, items: [{ productId: a.id, quantity: 1 }] },
+          { saleDate: "não-data", receivedCents: 100, items: [{ variantId: a, quantity: 1 }] },
           { db },
         ).ok,
       ).toBe(false);
@@ -91,22 +95,22 @@ describe("service sales — venda presencial (T036/T037)", () => {
   it("some ao faturamento do mês (NF + presencial) e não soma de outros meses (cenário US4.2)", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const a = mkProduct(db, "Busto Eiffel", 1_000, 400);
+      const a = mkVariant(db, "Busto Eiffel", 400);
 
       const julho = createPresentialSale(
-        { saleDate: "2026-07-20", receivedCents: 500, items: [{ productId: a.id, quantity: 1 }] },
+        { saleDate: "2026-07-20", receivedCents: 500, items: [{ variantId: a, quantity: 1 }] },
         { db },
       );
       const agostoA = createPresentialSale(
-        { saleDate: "2026-08-05", receivedCents: 300, items: [{ productId: a.id, quantity: 1 }] },
+        { saleDate: "2026-08-05", receivedCents: 300, items: [{ variantId: a, quantity: 1 }] },
         { db },
       );
       const agostoB = createPresentialSale(
-        { saleDate: "2026-08-28", receivedCents: 100, items: [{ productId: a.id, quantity: 1 }] },
+        { saleDate: "2026-08-28", receivedCents: 100, items: [{ variantId: a, quantity: 1 }] },
         { db },
       );
       const outro = createPresentialSale(
-        { saleDate: "2026-09-01", receivedCents: 999, items: [{ productId: a.id, quantity: 1 }] },
+        { saleDate: "2026-09-01", receivedCents: 999, items: [{ variantId: a, quantity: 1 }] },
         { db },
       );
       expect(agostoA.ok).toBe(true);
@@ -153,13 +157,13 @@ describe("service sales — venda presencial (T036/T037)", () => {
   it("listSales mostra a venda presencial na lista, ordenada por data desc e com itemCount", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const a = mkProduct(db, "Busto Eiffel", 1_000, 400);
+      const a = mkVariant(db, "Busto Eiffel", 400);
       const d1 = createPresentialSale(
-        { saleDate: "2026-08-01", receivedCents: 100, items: [{ productId: a.id, quantity: 1 }] },
+        { saleDate: "2026-08-01", receivedCents: 100, items: [{ variantId: a, quantity: 1 }] },
         { db },
       );
       const d2 = createPresentialSale(
-        { saleDate: "2026-08-02", receivedCents: 200, items: [{ productId: a.id, quantity: 2 }] },
+        { saleDate: "2026-08-02", receivedCents: 200, items: [{ variantId: a, quantity: 2 }] },
         { db },
       );
       expect(d1.ok && d2.ok).toBe(true);

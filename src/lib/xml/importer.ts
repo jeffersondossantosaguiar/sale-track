@@ -1,7 +1,7 @@
 import { feeFromBps, marginOf, netOf } from "@/lib/domain/cxmoney";
 import { type SQL, and, eq } from "drizzle-orm";
 import { type Db, getDb } from "../db/client";
-import { productCodes, products, saleItems, sales } from "../db/schema";
+import { productCodes, saleItems, sales, variants } from "../db/schema";
 import { getChannelFeeBps } from "../sales/service";
 import type { Channel } from "./channel";
 import { linkItems } from "./link";
@@ -55,19 +55,19 @@ export function importNfeToDb(
     .select({
       code: productCodes.code,
       channel: productCodes.channel,
-      product: {
-        id: products.id,
-        estimatedCostCents: products.estimatedCostCents,
+      variant: {
+        id: variants.id,
+        costCents: variants.costCents,
       },
     })
     .from(productCodes)
-    .innerJoin(products, eq(products.id, productCodes.productId))
+    .innerJoin(variants, eq(variants.id, productCodes.variantId))
     .all();
 
   const linked = linkItems(invoice.items, channel, codes);
   const unlinked = invoice.items
     .map((item, index) => ({ item, linked: linked[index] }))
-    .filter(({ linked }) => linked.productId === null)
+    .filter(({ linked }) => linked.variantId === null)
     .map(({ item }) => ({ cProd: item.cProd, description: item.description }));
 
   const totalCost = linked.reduce((sum, item) => sum + (item.frozenCostCents ?? 0), 0);
@@ -99,7 +99,7 @@ export function importNfeToDb(
         .values(
           invoice.items.map((item, index) => ({
             saleId,
-            productId: linked[index].productId,
+            variantId: linked[index].variantId,
             cProd: item.cProd,
             description: item.description,
             quantity: item.quantity,

@@ -1,9 +1,11 @@
-import { type ProductRow, createProduct, createProductCode, listProducts } from "@/lib/catalog/service";
+import { createProduct, createProductCode, listVariants } from "@/lib/catalog/service";
 import type { Db } from "@/lib/db/client";
+import { variants } from "@/lib/db/schema";
 import { getNumberSetting, setNumberSetting } from "@/lib/db/settings";
 import { feeFromBps, marginOf, netOf } from "@/lib/domain/cxmoney";
 import { byChannelSummary, getChannelFeeBps, setSaleFee } from "@/lib/sales/service";
 import { importNfeToDb } from "@/lib/xml/importer";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { setupTestDb } from "./helpers/db";
 
@@ -13,12 +15,14 @@ import { setupTestDb } from "./helpers/db";
  * muda; só taxa → líquido → margem são recalculados (T040).
  */
 
-function mkProduct(db: Db, name: string, price: number, cost: number): ProductRow {
-  const result = createProduct({ name, categoryId: null, salePriceCents: price, estimatedCostCents: cost }, { db });
+function mkVariant(db: Db, name: string, cost: number): number {
+  const result = createProduct({ name, categoryId: null }, { db });
   if (!result.ok) throw new Error(result.error);
-  const product = listProducts({ db }).find((row) => row.name === name);
-  if (!product) throw new Error("produto não criado");
-  return product;
+  const rows = listVariants(result.value.id, { db });
+  const variant = rows[0];
+  if (!variant) throw new Error("produto sem variante default");
+  db.update(variants).set({ costCents: cost }).where(eq(variants.id, variant.id)).run();
+  return variant.id;
 }
 
 /** Importa uma NF de canal com um item vinculado (tracka custo congelado). */
@@ -44,8 +48,8 @@ describe("service sales — taxas por venda (T040)", () => {
   it("setSaleFee recalcula taxa/líquido/margem sem mutar o bruto do faturamento", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const product = mkProduct(db, "Busto Eiffel", 10_000, 4_000);
-      const code = createProductCode(product.id, { code: "X1", channel: "shopee" }, { db });
+      const variantId = mkVariant(db, "Busto Eiffel", 4_000);
+      const code = createProductCode(variantId, { code: "X1", channel: "shopee" }, { db });
       expect(code.ok).toBe(true);
       const imported = importNf(db, "000200", "X1", 10_000, "shopee");
       expect(imported.ok).toBe(true);
@@ -88,8 +92,8 @@ describe("service sales — taxas por venda (T040)", () => {
   it("importação pré-preenche taxa com o % padrão configurado do canal (cenário US5.1)", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const product = mkProduct(db, "Busto Eiffel", 10_000, 4_000);
-      const code = createProductCode(product.id, { code: "X1", channel: "shopee" }, { db });
+      const variantId = mkVariant(db, "Busto Eiffel", 4_000);
+      const code = createProductCode(variantId, { code: "X1", channel: "shopee" }, { db });
       expect(code.ok).toBe(true);
 
       setNumberSetting("channel_fee_bps_shopee", 1200, { db });
@@ -112,9 +116,9 @@ describe("service sales — taxas por venda (T040)", () => {
   it("resumo por canal: bruto, total de taxas e líquido (cenário US5.3)", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const product = mkProduct(db, "Busto Eiffel", 10_000, 4_000);
-      const shopeeCode = createProductCode(product.id, { code: "X1", channel: "shopee" }, { db });
-      const tiktokCode = createProductCode(product.id, { code: "X2", channel: "tiktok" }, { db });
+      const variantId = mkVariant(db, "Busto Eiffel", 4_000);
+      const shopeeCode = createProductCode(variantId, { code: "X1", channel: "shopee" }, { db });
+      const tiktokCode = createProductCode(variantId, { code: "X2", channel: "tiktok" }, { db });
       expect(shopeeCode.ok && tiktokCode.ok).toBe(true);
 
       setNumberSetting("channel_fee_bps_shopee", 1200, { db });

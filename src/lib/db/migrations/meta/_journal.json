@@ -29,6 +29,13 @@
       "when": 1789640000000,
       "tag": "0003_cash_entries_reversal",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789720000000,
+      "tag": "0004_variants_pricing",
+      "breakpoints": true
     }
   ]
 }

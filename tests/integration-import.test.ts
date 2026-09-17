@@ -1,4 +1,4 @@
-import { productCodes, products, saleItems, sales } from "@/lib/db/schema";
+import { productCodes, products, saleItems, sales, variants } from "@/lib/db/schema";
 import { importNfeToDb } from "@/lib/xml/importer";
 import { parseXmlInvoice } from "@/lib/xml/parser";
 import { describe, expect, it } from "vitest";
@@ -10,23 +10,39 @@ function single<T>(value: T | undefined, label: string): T {
 }
 
 function seedCatalog(db: ReturnType<typeof setupTestDb>["db"]) {
-  const productId = Number(
-    db.insert(products).values({ name: "Totem Vegeta e Bulma", estimatedCostCents: 123 }).run().lastInsertRowid,
+  const productId = Number(db.insert(products).values({ name: "Totem Vegeta e Bulma" }).run().lastInsertRowid);
+  const variantId = Number(
+    db
+      .insert(variants)
+      .values({
+        productId,
+        sku: "TOTEM-VB",
+        name: "Totem Vegeta e Bulma",
+        costCents: 123,
+        printTimeMin: 0,
+        manualTimeMin: 0,
+        filamentGrams: 0,
+        packagingCents: 0,
+        active: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run().lastInsertRowid,
   );
   db.insert(productCodes)
     .values([
-      { productId, code: "169415788741", channel: "shopee" },
-      { productId, code: "TOTEM-CASAL", channel: null }, // código geral
+      { variantId, code: "169415788741", channel: "shopee" },
+      { variantId, code: "TOTEM-CASAL", channel: null }, // código geral
     ])
     .run();
-  return productId;
+  return variantId;
 }
 
 describe("T019 — integração: import NFe → sale + items vinculados", () => {
   it("importa Shopee, vincula por cProd e congela custo (D6)", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const catalogProductId = seedCatalog(db);
+      const variantId = seedCatalog(db);
       const parsed = parseXmlInvoice(readFixture(FIXTURE_SHOPEE_1));
       expect(parsed.ok).toBe(true);
       if (!parsed.ok) return;
@@ -48,7 +64,7 @@ describe("T019 — integração: import NFe → sale + items vinculados", () => 
       const items = db.select().from(saleItems).all();
       expect(items).toHaveLength(1);
       expect(items[0]).toMatchObject({
-        productId: catalogProductId,
+        variantId,
         cProd: "169415788741",
         frozenCostCents: 123,
         quantity: 1,
@@ -75,7 +91,7 @@ describe("T019 — integração: import NFe → sale + items vinculados", () => 
       expect(outcome.unlinked).toEqual([{ cProd: "Padrao", description: expect.stringContaining("Ash Greninja") }]);
 
       const item = single(db.select().from(saleItems).get(), "saleItems");
-      expect(item.productId).toBeNull();
+      expect(item.variantId).toBeNull();
       expect(item.frozenCostCents).toBeNull();
 
       const sale = single(db.select().from(sales).get(), "sales");

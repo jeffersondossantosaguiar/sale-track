@@ -1,9 +1,9 @@
 import { reverseCashEntry } from "@/lib/cash/service";
-import { type ProductRow, createProduct, createProductCode, listProducts } from "@/lib/catalog/service";
+import { createProduct, createProductCode, listVariants } from "@/lib/catalog/service";
 import { buildExtratoCsv } from "@/lib/dashboard/extrato";
 import { buildDashboardStats, currentMonth, monthFromParam, monthToParam } from "@/lib/dashboard/service";
 import type { Db } from "@/lib/db/client";
-import { cashEntries, sales } from "@/lib/db/schema";
+import { cashEntries, sales, variants } from "@/lib/db/schema";
 import { setNumberSetting } from "@/lib/db/settings";
 import { usedRatioBps } from "@/lib/domain/meieto";
 import { createPresentialSale, setSaleFee } from "@/lib/sales/service";
@@ -20,12 +20,15 @@ import { setupTestDb } from "./helpers/db";
 
 const MONTH = { year: 2026, month: 8 };
 
-function mkProduct(db: Db, name: string, price: number, cost: number): ProductRow {
-  const result = createProduct({ name, categoryId: null, salePriceCents: price, estimatedCostCents: cost }, { db });
+/** Cria produto + variante default com custo definido; devolve o variantId. */
+function mkVariant(db: Db, name: string, cost: number): number {
+  const result = createProduct({ name, categoryId: null }, { db });
   if (!result.ok) throw new Error(result.error);
-  const product = listProducts({ db }).find((row) => row.name === name);
-  if (!product) throw new Error("produto não criado");
-  return product;
+  const rows = listVariants(result.value.id, { db });
+  const variant = rows[0];
+  if (!variant) throw new Error("produto sem variante default");
+  db.update(variants).set({ costCents: cost }).where(eq(variants.id, variant.id)).run();
+  return variant.id;
 }
 
 function importNf(db: Db, invoiceNumber: string, cProd: string, grossCents: number) {
@@ -48,8 +51,8 @@ function importNf(db: Db, invoiceNumber: string, cProd: string, grossCents: numb
 
 /** Semente completa de um mês: NF Shopee com taxa + venda presencial + gastos. */
 function seedMonth(db: Db): { presentialSaleId: number; cashOutId: number } {
-  const product = mkProduct(db, "Busto Eiffel", 10_000, 4_000);
-  const code = createProductCode(product.id, { code: "X1", channel: "shopee" }, { db });
+  const variantId = mkVariant(db, "Busto Eiffel", 4_000);
+  const code = createProductCode(variantId, { code: "X1", channel: "shopee" }, { db });
   if (!code.ok) throw new Error(code.error);
 
   setNumberSetting("channel_fee_bps_shopee", 1200, { db }); // 12% — nasce a taxa
@@ -61,7 +64,7 @@ function seedMonth(db: Db): { presentialSaleId: number; cashOutId: number } {
     {
       saleDate: "2026-08-15",
       receivedCents: 5_000,
-      items: [{ productId: product.id, quantity: 1 }],
+      items: [{ variantId, quantity: 1 }],
     },
     { db },
   );

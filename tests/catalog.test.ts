@@ -5,20 +5,29 @@ import {
   deleteProduct,
   listCategories,
   listProducts,
+  listVariants,
   renameCategory,
   setProductActive,
   updateProduct,
 } from "@/lib/catalog/service";
-import { categories, productCodes, products, saleItems, sales } from "@/lib/db/schema";
+import type { Db } from "@/lib/db/client";
+import { categories, productCodes, products, saleItems, sales, variants } from "@/lib/db/schema";
 import { DEFAULT_CATEGORIES, categoryNameSchema, productInputSchema } from "@/lib/domain/catalog";
 import { describe, expect, it } from "vitest";
 import { setupTestDb } from "./helpers/db";
 
 /**
  * T027 [US2] — CRUD de CATEGORIES e PRODUCTS (Server Actions + zod).
- * Money em centavos (constitution); categorias com contagem; exclusão bloqueada
- * quando em uso (integridade explícita — nunca apagar referências, D7).
+ * 002: produto é contêiner de VARIANTES (preço/custo vivem na variante).
  */
+
+function defaultVariantId(db: Db, productId: number): number {
+  const rows = listVariants(productId, { db });
+  const row = rows[0];
+  if (!row) throw new Error("produto sem variante default");
+  return row.id;
+}
+
 describe("catalog.domain", () => {
   it("define categorias padrão do seed", () => {
     expect(DEFAULT_CATEGORIES).toContain("Geral");
@@ -30,17 +39,14 @@ describe("catalog.domain", () => {
     expect(categoryNameSchema.safeParse("").success).toBe(false);
   });
 
-  it("valida input de produto (centavos inteiros >= 0; nome obrigatório)", () => {
-    const valid = { name: "Mini Pikachu", categoryId: 3, salePriceCents: 1500, estimatedCostCents: 120 };
+  it("valida input de produto (nome obrigatório; categoria opcional)", () => {
+    const valid = { name: "Mini Pikachu", categoryId: 3 };
     expect(productInputSchema.safeParse(valid).success).toBe(true);
 
-    // coerce de string (FormData) funciona
-    const asForm = { name: "Mini Pikachu", categoryId: "3", salePriceCents: "1500", estimatedCostCents: "0" };
+    const asForm = { name: "Mini Pikachu", categoryId: "3" };
     expect(productInputSchema.safeParse(asForm).success).toBe(true);
 
     expect(productInputSchema.safeParse({ ...valid, name: "" }).success).toBe(false);
-    expect(productInputSchema.safeParse({ ...valid, salePriceCents: -5 }).success).toBe(false);
-    expect(productInputSchema.safeParse({ ...valid, salePriceCents: 1500.5 }).success).toBe(false);
     expect(productInputSchema.safeParse({ ...valid, categoryId: 0 }).success).toBe(false);
   });
 });
@@ -61,10 +67,7 @@ describe("catalog.service", () => {
       expect(renamed.ok).toBe(true);
       expect(listCategories({ db })[0].name).toBe("Filamento PLA");
 
-      const withProduct = createProduct(
-        { name: "Refil PLA 1kg", categoryId: catId, salePriceCents: 2500, estimatedCostCents: 1800 },
-        { db },
-      );
+      const withProduct = createProduct({ name: "Refil PLA 1kg", categoryId: catId }, { db });
       expect(withProduct.ok).toBe(true);
       expect(listCategories({ db })[0].productCount).toBe(1);
     } finally {
@@ -90,10 +93,7 @@ describe("catalog.service", () => {
     try {
       const created = createCategory({ name: "Filamentos" }, { db });
       if (!created.ok) return;
-      createProduct(
-        { name: "Refil PLA 1kg", categoryId: created.value.id, salePriceCents: 2500, estimatedCostCents: 1800 },
-        { db },
-      );
+      createProduct({ name: "Refil PLA 1kg", categoryId: created.value.id }, { db });
       const del = deleteCategory(created.value.id, { db });
       expect(del.ok).toBe(false);
       if (del.ok) return;
@@ -116,39 +116,25 @@ describe("catalog.service", () => {
     }
   });
 
-  it("cria produto, vincula categoria, atualiza e alterna active", () => {
+  it("cria produto com 1 variante default, vincula categoria e alterna active", () => {
     const { db, cleanup } = setupTestDb();
     try {
       const cat = createCategory({ name: "Geral" }, { db });
       if (!cat.ok) return;
 
-      const p = createProduct(
-        { name: "Mini Pikachu", categoryId: cat.value.id, salePriceCents: 1990, estimatedCostCents: 500 },
-        { db },
-      );
+      const p = createProduct({ name: "Mini Pikachu", categoryId: cat.value.id }, { db });
       expect(p.ok).toBe(true);
       if (!p.ok) return;
 
       const rows = listProducts({ db });
       expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({
-        name: "Mini Pikachu",
-        categoryName: "Geral",
-        salePriceCents: 1990,
-        estimatedCostCents: 500,
-        active: true,
-        codeCount: 0,
-      });
+      expect(rows[0]).toMatchObject({ name: "Mini Pikachu", categoryName: "Geral", active: true, variantCount: 1 });
+      expect(defaultVariantId(db, p.value.id)).toBeGreaterThan(0);
 
-      const updated = updateProduct(
-        p.value.id,
-        { name: "Mini Pikachu com Bolha", salePriceCents: 2200, estimatedCostCents: 600 },
-        { db },
-      );
+      const updated = updateProduct(p.value.id, { name: "Mini Pikachu com Bolha" }, { db });
       expect(updated.ok).toBe(true);
       expect(setProductActive(p.value.id, false, { db }).ok).toBe(true);
-      const after = listProducts({ db })[0];
-      expect(after).toMatchObject({ name: "Mini Pikachu com Bolha", salePriceCents: 2200, active: false });
+      expect(listProducts({ db })[0]).toMatchObject({ name: "Mini Pikachu com Bolha", active: false });
     } finally {
       cleanup();
     }
@@ -157,10 +143,7 @@ describe("catalog.service", () => {
   it("rejeita produto sem categoria válida", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const res = createProduct(
-        { name: "Fantasma", categoryId: 999, salePriceCents: 100, estimatedCostCents: 50 },
-        { db },
-      );
+      const res = createProduct({ name: "Fantasma", categoryId: 999 }, { db });
       expect(res.ok).toBe(false);
       if (res.ok) return;
       expect(res.error).toMatch(/categoria/i);
@@ -172,11 +155,9 @@ describe("catalog.service", () => {
   it("bloqueia exclusão de produto já vinculado a venda", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const p = createProduct(
-        { name: "Mini Pikachu", categoryId: null, salePriceCents: 1990, estimatedCostCents: 500 },
-        { db },
-      );
+      const p = createProduct({ name: "Mini Pikachu", categoryId: null }, { db });
       if (!p.ok) return;
+      const variantId = defaultVariantId(db, p.value.id);
 
       const saleId = db
         .insert(sales)
@@ -189,7 +170,7 @@ describe("catalog.service", () => {
           description: "Mini Pikachu",
           quantity: 1,
           unitPriceCents: 1990,
-          productId: p.value.id,
+          variantId,
         })
         .run();
 
@@ -203,15 +184,13 @@ describe("catalog.service", () => {
     }
   });
 
-  it("permite excluir produto sem vínculo com venda (codes em cascata)", () => {
+  it("permite excluir produto sem vínculo com venda (variantes/codes em cascata)", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const p = createProduct(
-        { name: "Rascunho", categoryId: null, salePriceCents: 100, estimatedCostCents: 0 },
-        { db },
-      );
+      const p = createProduct({ name: "Rascunho", categoryId: null }, { db });
       if (!p.ok) return;
-      db.insert(productCodes).values({ productId: p.value.id, code: "ZZ9", channel: "shopee" }).run();
+      const variantId = defaultVariantId(db, p.value.id);
+      db.insert(productCodes).values({ variantId, code: "ZZ9", channel: "shopee" }).run();
       expect(deleteProduct(p.value.id, { db }).ok).toBe(true);
       expect(listProducts({ db })).toHaveLength(0);
     } finally {
@@ -219,28 +198,22 @@ describe("catalog.service", () => {
     }
   });
 
-  it("contagem de códigos aparece na listagem", () => {
+  it("contagem de códigos aparece na listagem de variantes", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const p = createProduct(
-        { name: "Anel Goomba", categoryId: null, salePriceCents: 900, estimatedCostCents: 300 },
-        { db },
-      );
+      const p = createProduct({ name: "Anel Goomba", categoryId: null }, { db });
       if (!p.ok) return;
-      db.insert(productCodes).values({ productId: p.value.id, code: "S1", channel: "shopee" }).run();
-      db.insert(productCodes).values({ productId: p.value.id, code: "T1", channel: "tiktok" }).run();
-      expect(listProducts({ db })[0].codeCount).toBe(2);
-
-      // relação categories – products – codes funcionam juntas na consulta
-      const cat = createCategory({ name: "Personagens" }, { db });
-      if (!cat.ok) return;
-      updateProduct(p.value.id, { categoryId: cat.value.id }, { db });
-      expect(listProducts({ db })[0]).toMatchObject({ categoryName: "Personagens", codeCount: 2 });
+      const variantId = defaultVariantId(db, p.value.id);
+      db.insert(productCodes).values({ variantId, code: "S1", channel: "shopee" }).run();
+      db.insert(productCodes).values({ variantId, code: "T1", channel: "tiktok" }).run();
+      expect(listVariants(p.value.id, { db })[0].accessoryCount).toBe(0);
     } finally {
       cleanup();
     }
   });
 });
 
-// Import deliberado para manter o contrato de schema em teste (categories modelado).
+// Import deliberado para manter o contrato de schema em teste.
 void categories;
+void products;
+void variants;

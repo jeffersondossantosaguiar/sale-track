@@ -30,15 +30,15 @@ async function presentialState(): Promise<ActionResult<PresentialState>> {
 
 export async function createPresentialSaleFrom(formData: FormData): Promise<ActionResult<PresentialState>> {
   const db = getDb().db;
-  const productIds = formData.getAll("productId").map(Number);
+  const variantIds = formData.getAll("variantId").map(Number);
   const quantities = formData.getAll("quantity").map((value) => Number(value));
 
   const result = createPresentialSale(
     {
       saleDate: String(formData.get("date") ?? ""),
       receivedCents: Number(formData.get("receivedCents") ?? 0),
-      items: productIds.map((productId, index) => ({
-        productId,
+      items: variantIds.map((variantId, index) => ({
+        variantId,
         quantity: Number.isFinite(quantities[index]) ? quantities[index] : 1,
       })),
     },

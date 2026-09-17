@@ -41,8 +41,6 @@ export const products = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     name: text("name").notNull(),
     categoryId: integer("category_id").references(() => categories.id, { onDelete: "set null" }),
-    salePriceCents: integer("sale_price_cents").notNull().default(0),
-    estimatedCostCents: integer("estimated_cost_cents").notNull().default(0),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
@@ -55,13 +53,140 @@ export const products = sqliteTable(
 );
 
 export const productRelations = relations(products, ({ many, one }) => ({
-  codes: many(productCodes),
+  variants: many(variants),
   category: one(categories, { fields: [products.categoryId], references: [categories.id] }),
 }));
 
+/* ============================== Variant ============================== */
+
+export const variants = sqliteTable(
+  "variants",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    sku: text("sku").notNull(),
+    name: text("name").notNull(),
+    printTimeMin: integer("print_time_min").notNull().default(0),
+    manualTimeMin: integer("manual_time_min").notNull().default(0),
+    filamentMaterialId: integer("filament_material_id").references(() => materials.id, { onDelete: "set null" }),
+    filamentGrams: integer("filament_grams").notNull().default(0),
+    packagingCents: integer("packaging_cents").notNull().default(0),
+    costCents: integer("cost_cents").notNull().default(0),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("variants_sku_idx").on(t.sku),
+    index("variants_product_idx").on(t.productId),
+    index("variants_material_idx").on(t.filamentMaterialId),
+  ],
+);
+
+export const variantRelations = relations(variants, ({ many, one }) => ({
+  product: one(products, { fields: [variants.productId], references: [products.id] }),
+  material: one(materials, { fields: [variants.filamentMaterialId], references: [materials.id] }),
+  codes: many(productCodes),
+  prices: many(variantPrices),
+  accessories: many(variantAccessories),
+}));
+
+/* ============================== Material ============================== */
+
+export const materials = sqliteTable(
+  "materials",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    pricePerKgCents: integer("price_per_kg_cents").notNull().default(0),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("materials_active_idx").on(t.active)],
+);
+
+/* ============================== VariantAccessory ============================== */
+
+export const variantAccessories = sqliteTable(
+  "variant_accessories",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    variantId: integer("variant_id")
+      .notNull()
+      .references(() => variants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    costCents: integer("cost_cents").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("variant_accessories_variant_idx").on(t.variantId)],
+);
+
+export const variantAccessoryRelations = relations(variantAccessories, ({ one }) => ({
+  variant: one(variants, { fields: [variantAccessories.variantId], references: [variants.id] }),
+}));
+
+/* ============================== VariantPrice ============================== */
+
+export const variantPrices = sqliteTable(
+  "variant_prices",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    variantId: integer("variant_id")
+      .notNull()
+      .references(() => variants.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull(), // shopee | tiktok
+    marginBps: integer("margin_bps").notNull().default(0),
+    suggestedPriceCents: integer("suggested_price_cents").notNull().default(0),
+    practicedPriceCents: integer("practiced_price_cents").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("variant_prices_variant_channel_idx").on(t.variantId, t.channel),
+    index("variant_prices_variant_idx").on(t.variantId),
+  ],
+);
+
+export const variantPriceRelations = relations(variantPrices, ({ one }) => ({
+  variant: one(variants, { fields: [variantPrices.variantId], references: [variants.id] }),
+}));
+
+/* ============================== Printer ============================== */
+
+export const printers = sqliteTable(
+  "printers",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    acquisitionCents: integer("acquisition_cents").notNull().default(0),
+    usefulLifeYears: integer("useful_life_years").notNull().default(3),
+    powerWatts: integer("power_watts").notNull().default(0),
+    maintenanceCentsPerHour: integer("maintenance_cents_per_hour").notNull().default(0),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("printers_active_idx").on(t.active)],
+);
+
 /* ============================ ProductCode ============================ */
 /**
- * Multi-código por canal (D3): cProd do XML X produto.
+ * Multi-código por canal (D3): cProd do XML X variante.
  * `channel` = "shopee" | "tiktok" | "geral" | null (vale p/ qualquer canal).
  * Sempre que o usuário vincula uma venda, o sistema aprende o código →
  * cria/atualiza esta tabela (auto-vinculação em imports futuros).
@@ -71,9 +196,9 @@ export const productCodes = sqliteTable(
   "product_codes",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    productId: integer("product_id")
+    variantId: integer("variant_id")
       .notNull()
-      .references(() => products.id, { onDelete: "cascade" }),
+      .references(() => variants.id, { onDelete: "cascade" }),
     code: text("code").notNull(),
     channel: text("channel"), // null = geral
     createdAt: integer("created_at", { mode: "timestamp" })
@@ -82,12 +207,12 @@ export const productCodes = sqliteTable(
   },
   (t) => [
     uniqueIndex("product_codes_code_channel_idx").on(t.code, t.channel),
-    index("product_codes_product_idx").on(t.productId),
+    index("product_codes_variant_idx").on(t.variantId),
   ],
 );
 
 export const productCodeRelations = relations(productCodes, ({ one }) => ({
-  product: one(products, { fields: [productCodes.productId], references: [products.id] }),
+  variant: one(variants, { fields: [productCodes.variantId], references: [variants.id] }),
 }));
 
 /* ============================== Sale ============================== */
@@ -133,7 +258,7 @@ export const saleItems = sqliteTable(
     saleId: integer("sale_id")
       .notNull()
       .references(() => sales.id, { onDelete: "cascade" }),
-    productId: integer("product_id").references(() => products.id, { onDelete: "set null" }), // null = sem vínculo
+    variantId: integer("variant_id").references(() => variants.id, { onDelete: "set null" }), // null = sem vínculo
     cProd: text("c_prod").notNull(), // código do produto no XML (bruto)
     description: text("description").notNull(),
     quantity: integer("quantity").notNull().default(1),
@@ -143,12 +268,12 @@ export const saleItems = sqliteTable(
       .notNull()
       .$defaultFn(() => new Date()),
   },
-  (t) => [index("sale_items_sale_idx").on(t.saleId), index("sale_items_product_idx").on(t.productId)],
+  (t) => [index("sale_items_sale_idx").on(t.saleId), index("sale_items_variant_idx").on(t.variantId)],
 );
 
 export const saleItemRelations = relations(saleItems, ({ one }) => ({
   sale: one(sales, { fields: [saleItems.saleId], references: [sales.id] }),
-  product: one(products, { fields: [saleItems.productId], references: [products.id] }),
+  variant: one(variants, { fields: [saleItems.variantId], references: [variants.id] }),
 }));
 
 /* ===== CashEntry ===== */

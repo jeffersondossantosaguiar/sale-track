@@ -1,9 +1,9 @@
 import { type Db, getDb } from "@/lib/db/client";
-import { cashEntries, products, saleItems, sales } from "@/lib/db/schema";
-import { getSetting } from "@/lib/db/settings";
+import { cashEntries, saleItems, sales, variantPrices, variants } from "@/lib/db/schema";
+import { getNumberSetting, getSetting } from "@/lib/db/settings";
 import { feeFromBps, marginOf, netOf } from "@/lib/domain/cxmoney";
 import { dateSchema } from "@/lib/domain/date";
-import { MAX_FEE_BPS, channelFeeSettingKey, normalizeBps } from "@/lib/domain/fees";
+import { MAX_FEE_BPS, channelFeeFixedSettingKey, channelFeeSettingKey, normalizeBps } from "@/lib/domain/fees";
 import { presentialSaleInputSchema } from "@/lib/domain/presential";
 import type { Channel } from "@/lib/xml/channel";
 import { type SQL, and, eq, gte, inArray, lt, sql } from "drizzle-orm";
@@ -122,8 +122,10 @@ export function annualGross(year: number, opts?: { db?: Db }): number {
 /**
  * Lança venda presencial (T036): faturamento + entrada no caixa, atomicamente.
  * - gross = valor recebido; mercado presencial não tem taxa → fee 0, net = gross.
- * - Custo congelado por item (D6) = custo estimado do produto → liquid = margem.
- * - cProd interno `P<id>` mantém o vínculo produto→item (catálogo continua ok).
+ * - Custo congelado por item (D6) = custo da VARIANTE → liquid = margem.
+ * - cProd interno `V<id>` mantém o vínculo variante→item (catálogo continua ok).
+ * - Presencial está fora do escopo da precificação por canal (002): a unidade de
+ *   preço é informativa (maior praticado do catálogo ou custo).
  */
 export function createPresentialSale(input: unknown, opts?: { db?: Db }): ServiceResult<{ saleId: number }> {
   const db = dbOf(opts);
@@ -131,31 +133,40 @@ export function createPresentialSale(input: unknown, opts?: { db?: Db }): Servic
   if (!parsed.success) return { ok: false, error: zodMessage(parsed.error.issues) };
   const { saleDate, receivedCents, items: lines } = parsed.data;
 
-  const ids = [...new Set(lines.map((line) => line.productId))];
-  const found = db.select().from(products).where(inArray(products.id, ids)).all();
-  const byId = new Map(found.map((product) => [product.id, product]));
+  const ids = [...new Set(lines.map((line) => line.variantId))];
+  const found = db.select().from(variants).where(inArray(variants.id, ids)).all();
+  const byId = new Map(found.map((variant) => [variant.id, variant]));
+
+  const practicedByVariant = new Map<number, number>();
+  const prices = db.select().from(variantPrices).where(inArray(variantPrices.variantId, ids)).all();
+  for (const price of prices) {
+    practicedByVariant.set(
+      price.variantId,
+      Math.max(practicedByVariant.get(price.variantId) ?? 0, price.practicedPriceCents),
+    );
+  }
 
   const totals: Array<{
-    product: (typeof found)[number];
+    variant: (typeof found)[number];
     quantity: number;
     unitPriceCents: number;
     frozenCostCents: number;
   }> = [];
   for (const line of lines) {
-    const product = byId.get(line.productId);
-    if (!product) return { ok: false, error: `produto ${line.productId} não encontrado` };
-    if (!product.active) return { ok: false, error: `produto "${product.name}" está inativo` };
+    const variant = byId.get(line.variantId);
+    if (!variant) return { ok: false, error: `variante ${line.variantId} não encontrada` };
+    if (!variant.active) return { ok: false, error: `variante "${variant.name}" está inativa` };
     totals.push({
-      product,
+      variant,
       quantity: line.quantity,
-      unitPriceCents: product.salePriceCents,
-      frozenCostCents: product.estimatedCostCents,
+      unitPriceCents: practicedByVariant.get(variant.id) ?? variant.costCents,
+      frozenCostCents: variant.costCents,
     });
   }
   const totalCostCents = totals.reduce((sum, entry) => sum + entry.frozenCostCents * entry.quantity, 0);
   const liquidCents = marginOf(receivedCents, 0, totalCostCents);
   const cashDescription =
-    totals.length === 1 ? `Venda presencial — ${totals[0].product.name}` : `Venda presencial (${totals.length} itens)`;
+    totals.length === 1 ? `Venda presencial — ${totals[0].variant.name}` : `Venda presencial (${totals.length} itens)`;
 
   try {
     const saleId = db.transaction((tx) => {
@@ -178,9 +189,9 @@ export function createPresentialSale(input: unknown, opts?: { db?: Db }): Servic
         .values(
           totals.map((entry) => ({
             saleId: id,
-            productId: entry.product.id,
-            cProd: `P${entry.product.id}`,
-            description: entry.product.name,
+            variantId: entry.variant.id,
+            cProd: `V${entry.variant.id}`,
+            description: entry.variant.name,
             quantity: entry.quantity,
             unitPriceCents: entry.unitPriceCents,
             frozenCostCents: entry.frozenCostCents,
@@ -214,6 +225,11 @@ export function createPresentialSale(input: unknown, opts?: { db?: Db }): Servic
 /** % padrão configurada para um canal (0 quando ausente) — usada na importação. */
 export function getChannelFeeBps(channel: Channel, opts?: { db?: Db }): number {
   return normalizeBps(getSetting(channelFeeSettingKey(channel), opts));
+}
+
+/** Taxa FIXA (centavos) padrão por canal (002/FR-013) — usada no preço sugerido. */
+export function getChannelFeeFixedCents(channel: Channel, opts?: { db?: Db }): number {
+  return getNumberSetting(channelFeeFixedSettingKey(channel), 0, opts);
 }
 
 export type ChannelSummaryRow = {

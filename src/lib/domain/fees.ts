@@ -14,6 +14,11 @@ export function channelFeeSettingKey(channel: string): string {
   return `channel_fee_bps_${channel}`;
 }
 
+/** Chave da taxa FIXA (centavos) por canal (002/FR-013). */
+export function channelFeeFixedSettingKey(channel: string): string {
+  return `channel_fee_fixed_cents_${channel}`;
+}
+
 /** Normaliza o valor salvo em settings para bps seguros (0..10000). */
 export function normalizeBps(raw: string | number | null | undefined): number {
   if (raw === null || raw === undefined || raw === "") return DEFAULT_CHANNEL_FEE_BPS;

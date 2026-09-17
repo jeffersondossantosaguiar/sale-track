@@ -8,7 +8,7 @@ import { dateSchema } from "./date";
  */
 
 const presentialItemLine = z.object({
-  productId: z.coerce.number().int().positive("produto inválido"),
+  variantId: z.coerce.number().int().positive("variante inválida"),
   quantity: z.coerce.number().int().min(1, "quantidade deve ser >= 1"),
 });
 

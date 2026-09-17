@@ -1,24 +1,24 @@
 "use client";
 
 import { applyCurrentCost, linkUnlinked } from "@/app/actions/catalog";
-import type { ProductRow, UnlinkedGroup } from "@/lib/catalog/service";
+import type { FlatVariantRow, UnlinkedGroup } from "@/lib/catalog/service";
 import { formatBRL } from "@/lib/domain/money";
 import { cn } from "@/lib/utils";
 import { CHANNEL_LABELS, type Channel } from "@/lib/xml/channel";
 import { useState, useTransition } from "react";
 
 /**
- * T031 — fila de "códigos sem vínculo": itens importados sem produto.
+ * T031 — fila de "códigos sem vínculo": itens importados sem variante.
  * Vincular manualmente APRENDE o código (próximas importações casam sozinhas) e
- * faz backfill de product_id; custo congelado só entra com ação explícita.
+ * faz backfill de variant_id; custo congelado só entra com ação explícita.
  */
 
 export default function UnlinkedPanel({
   initialGroups,
-  products,
+  variants,
 }: {
   initialGroups: UnlinkedGroup[];
-  products: ProductRow[];
+  variants: FlatVariantRow[];
 }) {
   const [groups, setGroups] = useState<UnlinkedGroup[]>(initialGroups);
   const [picks, setPicks] = useState<Record<string, string>>({});
@@ -27,9 +27,7 @@ export default function UnlinkedPanel({
   const [pending, startTransition] = useTransition();
 
   const apply = (
-    result:
-      | { ok: true; data: { groups: UnlinkedGroup[]; products: ProductRow[]; updated?: number } }
-      | { ok: false; error: string },
+    result: { ok: true; data: { groups: UnlinkedGroup[]; updated?: number } } | { ok: false; error: string },
     successText?: (updated: number) => string,
   ) => {
     if (!result.ok) {
@@ -45,13 +43,13 @@ export default function UnlinkedPanel({
   const key = (group: UnlinkedGroup) => `${group.cProd}::${group.channel}`;
 
   const submitLink = (group: UnlinkedGroup) => {
-    const productId = picks[key(group)];
-    if (!productId) {
-      setMessage("Escolha um produto para vincular.");
+    const variantId = picks[key(group)];
+    if (!variantId) {
+      setMessage("Escolha uma variante para vincular.");
       return;
     }
     const form = new FormData();
-    form.set("productId", productId);
+    form.set("variantId", variantId);
     form.set("cProd", group.cProd);
     form.set("channel", group.channel);
     startTransition(async () => {
@@ -117,12 +115,12 @@ export default function UnlinkedPanel({
                 value={picks[key(group)] ?? ""}
                 onChange={(event) => setPicks((prev) => ({ ...prev, [key(group)]: event.target.value }))}
                 disabled={pending}
-                className="w-56 rounded-md border bg-background px-2 py-1 text-xs disabled:opacity-50"
+                className="w-72 rounded-md border bg-background px-2 py-1 text-xs disabled:opacity-50"
               >
-                <option value="">— vincular a produto —</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name}
+                <option value="">— vincular a variante —</option>
+                {variants.map((variant) => (
+                  <option key={variant.id} value={variant.id}>
+                    {variant.productName} / {variant.name} ({variant.sku})
                   </option>
                 ))}
               </select>

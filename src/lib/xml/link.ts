@@ -1,7 +1,7 @@
 import type { Channel } from "./channel";
 
 /**
- * Vínculo cProd → produto via product_codes (T017).
+ * Vínculo cProd → variante via product_codes (US5).
  * Contrato: prefere código específico do canal; fallback para código "geral"
  * (channel null). Sem match → item sem vínculo (não bloqueia lote).
  * Presencial não tem códigos de marketplace → só casa códigos "geral".
@@ -10,15 +10,15 @@ import type { Channel } from "./channel";
 export type CodeLookupRow = {
   code: string;
   channel: string | null;
-  product: {
+  variant: {
     id: number;
-    estimatedCostCents: number;
+    costCents: number;
   };
 };
 
 export type LinkedItem = {
   cProd: string;
-  productId: number | null; // null = sem vínculo (continua na fila)
+  variantId: number | null; // null = sem vínculo (continua na fila)
   frozenCostCents: number | null; // null = sem custo conhecido
 };
 
@@ -37,11 +37,11 @@ export function linkCProd(cProd: string, channel: Channel, codes: CodeLookupRow[
     .sort((a, b) => rank(a.channel) - rank(b.channel));
 
   const best = candidates[0];
-  if (!best) return { cProd, productId: null, frozenCostCents: null };
+  if (!best) return { cProd, variantId: null, frozenCostCents: null };
   return {
     cProd,
-    productId: best.product.id,
-    frozenCostCents: best.product.estimatedCostCents, // congelado na venda (D6)
+    variantId: best.variant.id,
+    frozenCostCents: best.variant.costCents, // congelado na venda (D6)
   };
 }
 

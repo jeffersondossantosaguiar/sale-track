@@ -1,7 +1,7 @@
 "use client";
 
 import { type PresentialState, createPresentialSaleFrom } from "@/app/actions/sales-presential";
-import type { ProductRow } from "@/lib/catalog/service";
+import type { FlatVariantRow } from "@/lib/catalog/service";
 import { formatBRL, parseBrlToCents } from "@/lib/domain/money";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
@@ -13,19 +13,19 @@ import { useMemo, useState, useTransition } from "react";
  * A lista de vendas e as taxas vivem no TaxesPanel (T041).
  */
 
-type Line = { id: number; productId: string; quantity: string };
+type Line = { id: number; variantId: string; quantity: string };
 
 let lineSeq = 0;
-const blankLine = (): Line => ({ id: ++lineSeq, productId: "", quantity: "1" });
+const blankLine = (): Line => ({ id: ++lineSeq, variantId: "", quantity: "1" });
 
 export default function PresentialPanel({
   initialMonthTotal,
   initialMonth,
-  products,
+  variants,
 }: {
   initialMonthTotal: number;
   initialMonth: { year: number; month: number };
-  products: ProductRow[];
+  variants: FlatVariantRow[];
 }) {
   const router = useRouter();
   const [monthTotal, setMonthTotal] = useState(initialMonthTotal);
@@ -38,20 +38,20 @@ export default function PresentialPanel({
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const activeProducts = useMemo(() => products.filter((product) => product.active), [products]);
+  const activeVariants = useMemo(() => variants.filter((v) => v.active), [variants]);
 
-  const filteredProducts = useMemo(() => {
+  const filteredVariants = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (!needle) return activeProducts;
-    return activeProducts.filter((product) => product.name.toLowerCase().includes(needle));
-  }, [activeProducts, search]);
+    if (!needle) return activeVariants;
+    return activeVariants.filter((v) => `${v.productName} ${v.name}`.toLowerCase().includes(needle));
+  }, [activeVariants, search]);
 
-  const lineProducts = lines.map((line) => activeProducts.find((product) => product.id === Number(line.productId)));
+  const lineVariants = lines.map((line) => activeVariants.find((v) => v.id === Number(line.variantId)));
 
   const computedCents = lines.reduce((sum, line, index) => {
-    const product = lineProducts[index];
-    if (!product) return sum;
-    return sum + product.salePriceCents * (Number(line.quantity) || 0);
+    const variant = lineVariants[index];
+    if (!variant) return sum;
+    return sum + variant.priceCents * (Number(line.quantity) || 0);
   }, 0);
 
   const amountCents = useMemo(() => {
@@ -97,14 +97,14 @@ export default function PresentialPanel({
       setMessage("Selecione produtos e informe um valor.");
       return;
     }
-    if (lines.some((line) => line.productId === "")) {
+    if (lines.some((line) => line.variantId === "")) {
       setMessage("Todas as linhas precisam de um produto.");
       return;
     }
     const form = new FormData();
     form.set("date", date);
     form.set("receivedCents", String(amountCents));
-    for (const line of lines) form.append("productId", line.productId);
+    for (const line of lines) form.append("variantId", line.variantId);
     for (const line of lines) form.append("quantity", line.quantity);
     startTransition(async () => apply(await createPresentialSaleFrom(form)));
   };
@@ -140,18 +140,18 @@ export default function PresentialPanel({
           </label>
           <div className="flex-1 rounded-md border bg-background p-px">
             {lines.map((line, index) => {
-              const product = lineProducts[index];
+              const variant = lineVariants[index];
               return (
                 <div key={line.id} className="flex items-stretch gap-1 p-1">
                   <select
-                    value={line.productId}
-                    onChange={(event) => setLine(index, { productId: event.target.value })}
+                    value={line.variantId}
+                    onChange={(event) => setLine(index, { variantId: event.target.value })}
                     className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 text-sm"
                   >
                     <option value="">— escolher produto —</option>
-                    {filteredProducts.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.name} · {formatBRL(product.salePriceCents)}
+                    {filteredVariants.map((variant) => (
+                      <option key={variant.id} value={variant.id}>
+                        {variant.productName} / {variant.name} · {formatBRL(variant.priceCents)}
                       </option>
                     ))}
                   </select>
@@ -210,7 +210,7 @@ export default function PresentialPanel({
           <button
             type="button"
             onClick={submit}
-            disabled={pending || !lineProducts.some(Boolean)}
+            disabled={pending || !lineVariants.some(Boolean)}
             className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
             Registrar venda

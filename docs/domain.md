@@ -14,15 +14,23 @@
 
 ## Entidades
 
-- **Product** — nome, categoria, preço de venda, custo estimado atual (filamento + energia aprox.), lista de **códigos** (`cProd` por canal: Shopee, TikTok, geral). Códigos curados manualmente; o sistema aprende novos vínculos ao ligar um código solto.
-- **Sale** — canal, data, status (`normal` | `estornado` + data), itens `[{ descrição, qtd, valor unit, cProd, productId?, custo congelado }]`, valor bruto (NFe, imutável), **taxa marketplace** pré-preenchida por canal e editável, **líquido = bruto − taxa**, nº + série da NFe, cópia do XML bruto. Estorno **tira a venda do faturamento**, zera líquido, e sugere saída de caixa (reembolso).
+- **Product** — contêiner de **variantes**; nome, categoria. Não carrega mais preço/custo.
+- **Variant** — unidade real de venda com **SKU único**, insumos de fabricação (tempo de impressão, tempo manual, peso = filamento, material, embalagem, acessórios), **custo calculado** e preços por canal. Produto simples = 1 variante default.
+- **Material** — filamento com preço por kg (cor/tipo).
+- **VariantPrice** — margem, preço sugerido e praticado por variante × canal (Shopee/TikTok).
+- **Printer** — referência de custo (aquisição, vida útil, consumo W, manutenção) para derivar o R$/hora global (usa-se a **mais cara**).
+- **Sale** — canal, data, status (`normal` | `estornado` + data), itens `[{ descrição, qtd, valor unit, cProd, variantId?, custo congelado }]`, valor bruto (NFe, imutável), **taxa marketplace** pré-preenchida por canal e editável, **líquido = bruto − taxa**, nº + série da NFe, cópia do XML bruto. Estorno **tira a venda do faturamento**, zera líquido, e sugere saída de caixa (reembolso).
 - **CashEntry (caixa)** — data, tipo (entrada/saída), categoria (filamento, energia, manutenção, taxas, embalagem, outros), valor, descrição, vínculo opcional a venda(s).
 - **Invoice** — incorporado à Sale: número, série, data, total, XML original salvo. **Deduplicação por nº da nota.**
 
-## Custo e margem
-- **Custo congelado na venda:** cada venda guarda o custo vigente do produto *no dia da venda* — alterar o custo/preço do cadastro **não muda** margens históricas (a NFe também não pode ser alterada).
-- Botão **"aplicar custo atual às vendas sem custo"**: preenche só vendas que nunca tiveram custo (fase de transição pós-importação) e nunca toca nas já definidas.
-- Margem por venda usa o custo congelado; margem de novo produto usa o custo atual do cadastro.
+## Custo, margem e precificação (motor de custo)
+- **Motor de custo da variante:** `custo = filamento + energia+máquina + mão de obra + embalagem + acessórios`, detalhado por linha (mão de obra destacada).
+  - filamento = `peso(g)/1000 × R$/kg do material` (peso = filamento gasto).
+  - energia+máquina = `tempo_impressão × R$/hora global` (impressora **mais cara** ativa).
+  - mão de obra = `(tempo_impressão + tempo manual) × R$/hora`.
+- **Preço sugerido por canal** = `(custo + taxa_fixa) / (1 − taxa% − margem%)`. **Preço praticado** é decisão do dono e fica **congelado** (o sugerido é só ajuda; mudanças de custo/margem/taxa não o alteram).
+- **Custo congelado na venda:** cada venda guarda o custo vigente da **variante** *no dia da venda* — alterar custo/preço do cadastro **não muda** margens históricas (a NFe também não pode ser alterada).
+- Botão **"aplicar custo atual às vendas sem custo"**: preenche só vendas que nunca tiveram custo e nunca toca nas já definidas.
 
 ## Taxas do marketplace
 - **Percentual/regra padrão por canal**, configurado pelo usuário (a partir dos docs de cobrança de Shopee/TikTok e do det. das taxas no painel do vendedor).
@@ -31,7 +39,7 @@
 ## Importação de XML
 - Upload **em lote** de vários XMLs de uma vez.
 - **Canal detectado pelo nome do arquivo** (Shopee: `..._invoice_file_...`; TikTok: número puro) — sugestão **editável por lote** antes de confirmar; padrão desconhecido pergunta manual.
-- Itens casam com o catálogo por `cProd` + dica de canal; sem vínculo cai na fila "códigos sem vínculo" para ligar ao produto **uma vez** (daí aprende). Ao vincular, congela o custo da venda.
+- Itens casam com o catálogo por `cProd` + dica de canal, na granularidade de **variante**; sem vínculo cai na fila "códigos sem vínculo" para ligar à variante **uma vez** (daí aprende). Ao vincular, congela o custo da venda.
 - Faturamento do mês = NF importadas + presencial − estornos.
 
 ## Telas / relatórios

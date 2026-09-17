@@ -1,7 +1,7 @@
 import { listCashEntries } from "@/lib/cash/service";
-import { type ProductRow, createProduct, createProductCode, listProducts } from "@/lib/catalog/service";
+import { createProduct, createProductCode, listVariants } from "@/lib/catalog/service";
 import type { Db } from "@/lib/db/client";
-import { cashEntries, sales } from "@/lib/db/schema";
+import { cashEntries, sales, variants } from "@/lib/db/schema";
 import { createPresentialSale, listSales, reverseSale } from "@/lib/sales/service";
 import { importNfeToDb } from "@/lib/xml/importer";
 import { eq } from "drizzle-orm";
@@ -16,12 +16,14 @@ import { setupTestDb } from "./helpers/db";
  * faturamento — nada de saída fantasma no caixa.
  */
 
-function mkProduct(db: Db, name: string, price: number, cost: number): ProductRow {
-  const result = createProduct({ name, categoryId: null, salePriceCents: price, estimatedCostCents: cost }, { db });
+function mkVariant(db: Db, name: string, cost: number): number {
+  const result = createProduct({ name, categoryId: null }, { db });
   if (!result.ok) throw new Error(result.error);
-  const product = listProducts({ db }).find((row) => row.name === name);
-  if (!product) throw new Error("produto não criado");
-  return product;
+  const rows = listVariants(result.value.id, { db });
+  const variant = rows[0];
+  if (!variant) throw new Error("produto sem variante default");
+  db.update(variants).set({ costCents: cost }).where(eq(variants.id, variant.id)).run();
+  return variant.id;
 }
 
 function importNf(db: Db, invoiceNumber: string, cProd: string, grossCents: number) {
@@ -46,8 +48,8 @@ describe("reverseSale — estorno de venda (FR-011/T048)", () => {
   it("venda importada estornada sai do faturamento sem criar saída fantasma no caixa", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const product = mkProduct(db, "Busto Eiffel", 10_000, 4_000);
-      const code = createProductCode(product.id, { code: "X1", channel: "shopee" }, { db });
+      const variantId = mkVariant(db, "Busto Eiffel", 4_000);
+      const code = createProductCode(variantId, { code: "X1", channel: "shopee" }, { db });
       expect(code.ok).toBe(true);
 
       const imported = importNf(db, "000400", "X1", 10_000);
@@ -75,9 +77,9 @@ describe("reverseSale — estorno de venda (FR-011/T048)", () => {
   it("presencial estornada sai do faturamento e reverte a entrada do caixa (reembolso)", () => {
     const { db, cleanup } = setupTestDb();
     try {
-      const product = mkProduct(db, "Porta-chaves Dragão", 2_500, 500);
+      const variantId = mkVariant(db, "Porta-chaves Dragão", 500);
       const presential = createPresentialSale(
-        { saleDate: "2026-08-15", receivedCents: 2_500, items: [{ productId: product.id, quantity: 1 }] },
+        { saleDate: "2026-08-15", receivedCents: 2_500, items: [{ variantId, quantity: 1 }] },
         { db },
       );
       expect(presential.ok).toBe(true);

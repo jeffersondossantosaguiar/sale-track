@@ -2,8 +2,8 @@
 
 import { type ActionResult, actionData, actionError } from "@/lib/actions";
 import { getDb } from "@/lib/db/client";
-import { setNumberSetting } from "@/lib/db/settings";
-import { FEE_CHANNELS, channelFeeSettingKey, normalizeBps } from "@/lib/domain/fees";
+import { getNumberSetting, setNumberSetting } from "@/lib/db/settings";
+import { FEE_CHANNELS, channelFeeFixedSettingKey, channelFeeSettingKey, normalizeBps } from "@/lib/domain/fees";
 import {
   type ChannelSummaryRow,
   type SaleRow,
@@ -26,6 +26,7 @@ export type FeesState = {
   sales: SaleRow[];
   byChannel: ChannelSummaryRow[];
   channelFees: Record<Channel, number>;
+  channelFixedFees: Record<Channel, number>;
 };
 
 async function feesState(): Promise<ActionResult<FeesState>> {
@@ -33,7 +34,10 @@ async function feesState(): Promise<ActionResult<FeesState>> {
   const channelFees = Object.fromEntries(
     FEE_CHANNELS.map((channel) => [channel, getChannelFeeBps(channel, { db })]),
   ) as Record<Channel, number>;
-  return actionData({ sales: listSales({ db }), byChannel: byChannelSummary({ db }), channelFees });
+  const channelFixedFees = Object.fromEntries(
+    FEE_CHANNELS.map((channel) => [channel, getNumberSetting(channelFeeFixedSettingKey(channel), 0, { db })]),
+  ) as Record<Channel, number>;
+  return actionData({ sales: listSales({ db }), byChannel: byChannelSummary({ db }), channelFees, channelFixedFees });
 }
 
 /** Edita a taxa de uma venda específica (cenário US5.2). */
@@ -45,13 +49,16 @@ export async function setSaleFeeFrom(formData: FormData): Promise<ActionResult<F
   return feesState();
 }
 
-/** Configura a % padrão de um canal (cenário US5.1) — próxima importação nasce com ela. */
+/** Configura a % padrão e a taxa fixa de um canal (002/FR-013). */
 export async function setChannelFeeFrom(formData: FormData): Promise<ActionResult<FeesState>> {
   const db = getDb().db;
   const channel = String(formData.get("channel")) as Channel;
   const bps = normalizeBps(Number(formData.get("bps")));
   setNumberSetting(channelFeeSettingKey(channel), bps, { db });
+  const fixed = Number(formData.get("fixedCents")) || 0;
+  setNumberSetting(channelFeeFixedSettingKey(channel), Math.max(0, Math.round(fixed)), { db });
   revalidatePath("/sales");
+  revalidatePath("/products");
   return feesState();
 }
 

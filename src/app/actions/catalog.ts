@@ -2,40 +2,92 @@
 
 import { type ActionResult, actionData, actionError } from "@/lib/actions";
 import {
+  type AccessoryRow,
   type CategoryRow,
+  type CostBreakdownRow,
+  type MaterialRow,
+  type PrinterRow,
   type ProductCodeRow,
   type ProductRow,
   type UnlinkedGroup,
+  type VariantPriceRow,
+  type VariantRow,
+  addAccessory,
   applyCurrentCostToUncosted as applyCurrentCostService,
   createCategory as createCategoryService,
+  createMaterial as createMaterialService,
+  createPrinter as createPrinterService,
   createProductCode as createProductCodeService,
   createProduct as createProductService,
+  createVariant as createVariantService,
   deleteCategory as deleteCategoryService,
+  deleteMaterial as deleteMaterialService,
+  deletePrinter as deletePrinterService,
   deleteProductCode as deleteProductCodeService,
   deleteProduct as deleteProductService,
-  linkUnlinkedToProduct as linkUnlinkedService,
+  deleteVariant as deleteVariantService,
+  getVariantCostBreakdown,
+  linkUnlinkedToVariant as linkUnlinkedService,
+  listAccessories,
   listCategories,
+  listMaterials,
+  listPrinters,
   listProductCodes as listProductCodesService,
   listProducts,
   listUnlinkedGroups,
+  listVariantPrices,
+  listVariants,
+  removeAccessory,
   renameCategory as renameCategoryService,
   setProductActive as setProductActiveService,
+  setVariantActive as setVariantActiveService,
+  updateMaterial as updateMaterialService,
+  updatePrinter as updatePrinterService,
   updateProduct as updateProductService,
+  updateVariant as updateVariantService,
+  upsertVariantPrice,
 } from "@/lib/catalog/service";
 import { getDb } from "@/lib/db/client";
+import { setNumberSetting } from "@/lib/db/settings";
 import type { ProductCodeInput } from "@/lib/domain/catalog";
 import { revalidatePath } from "next/cache";
 
 /**
- * Server Actions do catálogo (T027/US2) — validação zod no service, resultado
- * tipado com as listas atualizadas (fonte de verdade = servidor) + revalidação.
+ * Server Actions do catálogo (produto → variante, material, preço por canal,
+ * impressora) — validação zod no service, resultado tipado com as listas
+ * atualizadas (fonte de verdade = servidor) + revalidação.
  */
 
 /** "" e valores vazios do select significam "sem categoria" (null). */
-function parseCategoryId(raw: FormDataEntryValue | null): number | null {
+function parseOptionalId(raw: FormDataEntryValue | null): number | null {
   const value = String(raw ?? "").trim();
   return value ? Number(value) : null;
 }
+
+function parseBool(raw: FormDataEntryValue | null): boolean {
+  return String(raw) === "true";
+}
+
+function productForm(formData: FormData) {
+  return {
+    name: String(formData.get("name") ?? ""),
+    categoryId: parseOptionalId(formData.get("categoryId")),
+  };
+}
+
+function variantForm(formData: FormData) {
+  return {
+    sku: String(formData.get("sku") ?? ""),
+    name: String(formData.get("name") ?? ""),
+    printTimeMin: Number(formData.get("printTimeMin") ?? 0),
+    manualTimeMin: Number(formData.get("manualTimeMin") ?? 0),
+    filamentMaterialId: parseOptionalId(formData.get("filamentMaterialId")),
+    filamentGrams: Number(formData.get("filamentGrams") ?? 0),
+    packagingCents: Number(formData.get("packagingCents") ?? 0),
+  };
+}
+
+/* ============================== Categories ============================== */
 
 export async function createCategory(formData: FormData): Promise<ActionResult<{ categories: CategoryRow[] }>> {
   const db = getDb().db;
@@ -61,17 +113,11 @@ export async function deleteCategory(formData: FormData): Promise<ActionResult<{
   return actionData({ categories: listCategories({ db }) });
 }
 
+/* ============================== Products ============================== */
+
 export async function createProduct(formData: FormData): Promise<ActionResult<{ products: ProductRow[] }>> {
   const db = getDb().db;
-  const result = createProductService(
-    {
-      name: String(formData.get("name") ?? ""),
-      categoryId: parseCategoryId(formData.get("categoryId")),
-      salePriceCents: Number(formData.get("salePriceCents") ?? 0),
-      estimatedCostCents: Number(formData.get("estimatedCostCents") ?? 0),
-    },
-    { db },
-  );
+  const result = createProductService(productForm(formData), { db });
   if (!result.ok) return actionError(result.error);
   revalidatePath("/products");
   return actionData({ products: listProducts({ db }) });
@@ -79,12 +125,9 @@ export async function createProduct(formData: FormData): Promise<ActionResult<{ 
 
 export async function updateProduct(formData: FormData): Promise<ActionResult<{ products: ProductRow[] }>> {
   const db = getDb().db;
-  const patch = {
-    ...(formData.has("name") ? { name: String(formData.get("name")) } : {}),
-    ...(formData.has("categoryId") ? { categoryId: parseCategoryId(formData.get("categoryId")) } : {}),
-    ...(formData.has("salePriceCents") ? { salePriceCents: Number(formData.get("salePriceCents")) } : {}),
-    ...(formData.has("estimatedCostCents") ? { estimatedCostCents: Number(formData.get("estimatedCostCents")) } : {}),
-  };
+  const patch: Record<string, unknown> = {};
+  if (formData.has("name")) patch.name = String(formData.get("name"));
+  if (formData.has("categoryId")) patch.categoryId = parseOptionalId(formData.get("categoryId"));
   const result = updateProductService(Number(formData.get("id")), patch, { db });
   if (!result.ok) return actionError(result.error);
   revalidatePath("/products");
@@ -93,9 +136,7 @@ export async function updateProduct(formData: FormData): Promise<ActionResult<{ 
 
 export async function setProductActive(formData: FormData): Promise<ActionResult<{ products: ProductRow[] }>> {
   const db = getDb().db;
-  const result = setProductActiveService(Number(formData.get("id")), String(formData.get("active")) === "true", {
-    db,
-  });
+  const result = setProductActiveService(Number(formData.get("id")), parseBool(formData.get("active")), { db });
   if (!result.ok) return actionError(result.error);
   revalidatePath("/products");
   return actionData({ products: listProducts({ db }) });
@@ -109,20 +150,239 @@ export async function deleteProduct(formData: FormData): Promise<ActionResult<{ 
   return actionData({ products: listProducts({ db }) });
 }
 
-/* ============================ Product Codes (T029) ============================ */
+/* ============================== Variants ============================== */
+
+export async function getVariants(formData: FormData): Promise<ActionResult<{ variants: VariantRow[] }>> {
+  const db = getDb().db;
+  return actionData({ variants: listVariants(Number(formData.get("productId")), { db }) });
+}
+
+export async function createVariant(formData: FormData): Promise<ActionResult<{ variants: VariantRow[] }>> {
+  const db = getDb().db;
+  const productId = Number(formData.get("productId"));
+  const result = createVariantService(productId, variantForm(formData), { db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ variants: listVariants(productId, { db }) });
+}
+
+export async function updateVariant(formData: FormData): Promise<ActionResult<{ variants: VariantRow[] }>> {
+  const db = getDb().db;
+  const id = Number(formData.get("id"));
+  const productId = Number(formData.get("productId"));
+  const patch: Record<string, unknown> = {};
+  if (formData.has("sku")) patch.sku = String(formData.get("sku"));
+  if (formData.has("name")) patch.name = String(formData.get("name"));
+  if (formData.has("printTimeMin")) patch.printTimeMin = Number(formData.get("printTimeMin"));
+  if (formData.has("manualTimeMin")) patch.manualTimeMin = Number(formData.get("manualTimeMin"));
+  if (formData.has("filamentMaterialId"))
+    patch.filamentMaterialId = parseOptionalId(formData.get("filamentMaterialId"));
+  if (formData.has("filamentGrams")) patch.filamentGrams = Number(formData.get("filamentGrams"));
+  if (formData.has("packagingCents")) patch.packagingCents = Number(formData.get("packagingCents"));
+  const result = updateVariantService(id, patch, { db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ variants: listVariants(productId, { db }) });
+}
+
+export async function setVariantActive(formData: FormData): Promise<ActionResult<{ variants: VariantRow[] }>> {
+  const db = getDb().db;
+  const productId = Number(formData.get("productId"));
+  const result = setVariantActiveService(Number(formData.get("id")), parseBool(formData.get("active")), { db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ variants: listVariants(productId, { db }) });
+}
+
+export async function deleteVariant(formData: FormData): Promise<ActionResult<{ variants: VariantRow[] }>> {
+  const db = getDb().db;
+  const productId = Number(formData.get("productId"));
+  const result = deleteVariantService(Number(formData.get("id")), { db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ variants: listVariants(productId, { db }) });
+}
+
+/* ============================== Materials ============================== */
+
+export async function getMaterials(): Promise<ActionResult<{ materials: MaterialRow[] }>> {
+  const db = getDb().db;
+  return actionData({ materials: listMaterials({ db }) });
+}
+
+export async function createMaterial(formData: FormData): Promise<ActionResult<{ materials: MaterialRow[] }>> {
+  const db = getDb().db;
+  const result = createMaterialService(
+    {
+      name: String(formData.get("name") ?? ""),
+      pricePerKgCents: Number(formData.get("pricePerKgCents") ?? 0),
+    },
+    { db },
+  );
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ materials: listMaterials({ db }) });
+}
+
+export async function updateMaterial(formData: FormData): Promise<ActionResult<{ materials: MaterialRow[] }>> {
+  const db = getDb().db;
+  const patch: Record<string, unknown> = {};
+  if (formData.has("name")) patch.name = String(formData.get("name"));
+  if (formData.has("pricePerKgCents")) patch.pricePerKgCents = Number(formData.get("pricePerKgCents"));
+  const result = updateMaterialService(Number(formData.get("id")), patch, { db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ materials: listMaterials({ db }) });
+}
+
+export async function deleteMaterial(formData: FormData): Promise<ActionResult<{ materials: MaterialRow[] }>> {
+  const db = getDb().db;
+  const result = deleteMaterialService(Number(formData.get("id")), { db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ materials: listMaterials({ db }) });
+}
+
+/* ============================== Accessories ============================== */
+
+export async function getAccessories(formData: FormData): Promise<ActionResult<{ accessories: AccessoryRow[] }>> {
+  const db = getDb().db;
+  return actionData({ accessories: listAccessories(Number(formData.get("variantId")), { db }) });
+}
+
+export async function addAccessoryAction(formData: FormData): Promise<ActionResult<{ accessories: AccessoryRow[] }>> {
+  const db = getDb().db;
+  const variantId = Number(formData.get("variantId"));
+  const result = addAccessory(
+    variantId,
+    { name: String(formData.get("name") ?? ""), costCents: Number(formData.get("costCents") ?? 0) },
+    { db },
+  );
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ accessories: listAccessories(variantId, { db }) });
+}
+
+export async function removeAccessoryAction(
+  formData: FormData,
+): Promise<ActionResult<{ accessories: AccessoryRow[] }>> {
+  const db = getDb().db;
+  const variantId = Number(formData.get("variantId"));
+  const result = removeAccessory(Number(formData.get("id")), { db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ accessories: listAccessories(variantId, { db }) });
+}
+
+/* ============================== Variant Prices ============================== */
+
+export async function getVariantPrices(formData: FormData): Promise<ActionResult<{ prices: VariantPriceRow[] }>> {
+  const db = getDb().db;
+  return actionData({ prices: listVariantPrices(Number(formData.get("variantId")), { db }) });
+}
+
+export async function getVariantCostDetail(formData: FormData): Promise<ActionResult<{ breakdown: CostBreakdownRow }>> {
+  const db = getDb().db;
+  return actionData({ breakdown: getVariantCostBreakdown(db, Number(formData.get("variantId"))) });
+}
+
+export async function upsertVariantPriceAction(
+  formData: FormData,
+): Promise<ActionResult<{ prices: VariantPriceRow[] }>> {
+  const db = getDb().db;
+  const variantId = Number(formData.get("variantId"));
+  const result = upsertVariantPrice(
+    variantId,
+    {
+      channel: String(formData.get("channel")) as "shopee" | "tiktok",
+      ...(formData.has("marginBps") ? { marginBps: Number(formData.get("marginBps")) } : {}),
+      ...(formData.has("practicedPriceCents")
+        ? { practicedPriceCents: Number(formData.get("practicedPriceCents")) }
+        : {}),
+      ...(formData.has("setPracticedToSuggested") && String(formData.get("setPracticedToSuggested")) === "true"
+        ? { setPracticedToSuggested: true }
+        : {}),
+    },
+    { db },
+  );
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ prices: listVariantPrices(variantId, { db }) });
+}
+
+/* ============================== Printers ============================== */
+
+export async function getPrinters(): Promise<ActionResult<{ printers: PrinterRow[] }>> {
+  const db = getDb().db;
+  return actionData({ printers: listPrinters({ db }) });
+}
+
+export async function createPrinter(formData: FormData): Promise<ActionResult<{ printers: PrinterRow[] }>> {
+  const db = getDb().db;
+  const result = createPrinterService(
+    {
+      name: String(formData.get("name") ?? ""),
+      acquisitionCents: Number(formData.get("acquisitionCents") ?? 0),
+      usefulLifeYears: Number(formData.get("usefulLifeYears") ?? 3),
+      powerWatts: Number(formData.get("powerWatts") ?? 0),
+      maintenanceCentsPerHour: Number(formData.get("maintenanceCentsPerHour") ?? 0),
+    },
+    { db },
+  );
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ printers: listPrinters({ db }) });
+}
+
+export async function updatePrinter(formData: FormData): Promise<ActionResult<{ printers: PrinterRow[] }>> {
+  const db = getDb().db;
+  const patch: Record<string, unknown> = {};
+  if (formData.has("name")) patch.name = String(formData.get("name"));
+  if (formData.has("acquisitionCents")) patch.acquisitionCents = Number(formData.get("acquisitionCents"));
+  if (formData.has("usefulLifeYears")) patch.usefulLifeYears = Number(formData.get("usefulLifeYears"));
+  if (formData.has("powerWatts")) patch.powerWatts = Number(formData.get("powerWatts"));
+  if (formData.has("maintenanceCentsPerHour"))
+    patch.maintenanceCentsPerHour = Number(formData.get("maintenanceCentsPerHour"));
+  const result = updatePrinterService(Number(formData.get("id")), patch, { db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ printers: listPrinters({ db }) });
+}
+
+export async function deletePrinter(formData: FormData): Promise<ActionResult<{ printers: PrinterRow[] }>> {
+  const db = getDb().db;
+  const result = deletePrinterService(Number(formData.get("id")), { db });
+  if (!result.ok) return actionError(result.error);
+  revalidatePath("/products");
+  return actionData({ printers: listPrinters({ db }) });
+}
+
+/* ============================== Global params ============================== */
+
+export async function setGlobalParams(formData: FormData): Promise<ActionResult<{ saved: boolean }>> {
+  const db = getDb().db;
+  if (formData.has("kwhRateCents")) setNumberSetting("kwh_rate_cents", Number(formData.get("kwhRateCents")), { db });
+  if (formData.has("hoursPerWeek")) setNumberSetting("hours_per_week", Number(formData.get("hoursPerWeek")), { db });
+  if (formData.has("laborCostPerHourCents"))
+    setNumberSetting("labor_cost_per_hour_cents", Number(formData.get("laborCostPerHourCents")), { db });
+  revalidatePath("/products");
+  return actionData({ saved: true });
+}
+
+/* ============================ Product Codes (variante) ============================ */
 
 export async function getProductCodes(formData: FormData): Promise<ActionResult<{ codes: ProductCodeRow[] }>> {
   const db = getDb().db;
-  return actionData({ codes: listProductCodesService(Number(formData.get("productId")), { db }) });
+  return actionData({ codes: listProductCodesService(Number(formData.get("variantId")), { db }) });
 }
 
 export async function addProductCode(
   formData: FormData,
 ): Promise<ActionResult<{ codes: ProductCodeRow[]; products: ProductRow[] }>> {
   const db = getDb().db;
-  const productId = Number(formData.get("productId"));
+  const variantId = Number(formData.get("variantId"));
   const result = createProductCodeService(
-    productId,
+    variantId,
     {
       code: String(formData.get("code") ?? ""),
       channel: String(formData.get("channel") ?? "geral") as ProductCodeInput["channel"],
@@ -131,21 +391,21 @@ export async function addProductCode(
   );
   if (!result.ok) return actionError(result.error);
   revalidatePath("/products");
-  return actionData({ codes: listProductCodesService(productId, { db }), products: listProducts({ db }) });
+  return actionData({ codes: listProductCodesService(variantId, { db }), products: listProducts({ db }) });
 }
 
 export async function removeProductCode(
   formData: FormData,
 ): Promise<ActionResult<{ codes: ProductCodeRow[]; products: ProductRow[] }>> {
   const db = getDb().db;
-  const productId = Number(formData.get("productId"));
+  const variantId = Number(formData.get("variantId"));
   const result = deleteProductCodeService(Number(formData.get("id")), { db });
   if (!result.ok) return actionError(result.error);
   revalidatePath("/products");
-  return actionData({ codes: listProductCodesService(productId, { db }), products: listProducts({ db }) });
+  return actionData({ codes: listProductCodesService(variantId, { db }), products: listProducts({ db }) });
 }
 
-/* ============================ Unlinked queue (T031) ============================ */
+/* ============================ Unlinked queue (variante) ============================ */
 
 export async function listUnlinked(): Promise<ActionResult<{ groups: UnlinkedGroup[] }>> {
   return actionData({ groups: listUnlinkedGroups() });
@@ -157,7 +417,7 @@ export async function linkUnlinked(
   const db = getDb().db;
   const result = linkUnlinkedService(
     {
-      productId: Number(formData.get("productId")),
+      variantId: Number(formData.get("variantId")),
       cProd: String(formData.get("cProd") ?? ""),
       channel: String(formData.get("channel") ?? ""),
     },

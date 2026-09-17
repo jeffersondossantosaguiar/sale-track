@@ -13,6 +13,12 @@ import { getSetting, setSetting } from "./settings";
 
 export const SEED_CONFIG: Record<string, string> = {
   mei_limit_cents: String(81_000 * 100), // R$ 81.000,00 — teto MEI default (constitution)
+  // Parâmetros globais do motor de custo (002) — defaults seguros, editáveis na UI.
+  kwh_rate_cents: "90", // R$ 0,90/kWh
+  hours_per_week: "72", // 12h/dia × 6 dias
+  labor_cost_per_hour_cents: "0", // R$/h de mão de obra — dono define
+  channel_fee_fixed_cents_shopee: "0",
+  channel_fee_fixed_cents_tiktok: "0",
 };
 
 function seedCategories(): void {
