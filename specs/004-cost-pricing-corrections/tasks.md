@@ -20,8 +20,8 @@ contracts/pricing-engine.md
 
 **Purpose**: Preparação da feature; nenhuma chave de `settings` nova é necessária.
 
-- [ ] T001 Documentar a feature (spec/research/data-model/plan/quickstart/contract/checklist/tasks).
-- [ ] T002 Atualizar o contrato canônico `specs/002-product-variants-pricing/contracts/pricing-engine.md`
+- [x] T001 Documentar a feature (spec/research/data-model/plan/quickstart/contract/checklist/tasks).
+- [x] T002 Atualizar o contrato canônico `specs/002-product-variants-pricing/contracts/pricing-engine.md`
       (mão de obra = só manual; split energia/máquina; taxa % como bps).
 
 ---
@@ -37,20 +37,20 @@ máquina em linhas separadas; total = soma das linhas.
 
 > Escrever os testes ANTES da implementação (red-green-refactor).
 
-- [ ] T003 [P] [US1] Unit test `tests/cost.test.ts`: `laborCostCents` usa **só `manualTimeMin`**;
+- [x] T003 [P] [US1] Unit test `tests/cost.test.ts`: `laborCostCents` usa **só `manualTimeMin`**;
       `energyCents`/`machineCents` separados; total = soma das linhas; exemplo do dono (custo real).
-- [ ] T004 [P] [US1] Unit test `tests/pricing.test.ts`: sugerido com taxa % como bps (2000 = 20%);
+- [x] T004 [P] [US1] Unit test `tests/pricing.test.ts`: sugerido com taxa % como bps (2000 = 20%);
       praticado congelado após recálculo.
 
 ### Implementation for User Story 1
 
-- [ ] T005 [P] [US1] `src/lib/domain/printer.ts`: expor `energyPerHour` e `machinePerHour` separados e
+- [x] T005 [P] [US1] `src/lib/domain/printer.ts`: expor `energyPerHour` e `machinePerHour` separados e
       os globais (`globalEnergyPerHour`, `globalMachinePerHour`) por impressora ativa mais cara.
-- [ ] T006 [P] [US1] `src/lib/domain/cost.ts`: `laborCostCents(manualTimeMin, rate)`; `computeVariantCost`
+- [x] T006 [P] [US1] `src/lib/domain/cost.ts`: `laborCostCents(manualTimeMin, rate)`; `computeVariantCost`
       retorna `{ filament, energy, machine, labor, packaging, accessories, total }`.
-- [ ] T007 [US1] `src/lib/catalog/service.ts`: `recomputeVariantCost` e `getVariantCostBreakdown` usam o
+- [x] T007 [US1] `src/lib/catalog/service.ts`: `recomputeVariantCost` e `getVariantCostBreakdown` usam o
       novo shape e a nova derivação.
-- [ ] T008 [US1] `src/app/(dashboard)/products/products-panel.tsx`: detalhamento com linhas **Energia** e
+- [x] T008 [US1] `src/app/(dashboard)/products/products-panel.tsx`: detalhamento com linhas **Energia** e
       **Máquina** separadas (tipo `CostBreakdown` atualizado).
 
 **Checkpoint**: US1 funcional e testável isoladamente.
@@ -61,11 +61,11 @@ máquina em linhas separadas; total = soma das linhas.
 
 **Goal**: Painel carrega valores salvos; salvar recalcula todas as variantes.
 
-- [ ] T009 [US2] `src/app/(dashboard)/settings/pricing/page.tsx`: ler `kwh_rate_cents`,
+- [x] T009 [US2] `src/app/(dashboard)/settings/pricing/page.tsx`: ler `kwh_rate_cents`,
       `hours_per_week`, `labor_cost_per_hour_cents` (via `getNumberSetting`) e passar ao painel.
-- [ ] T010 [US2] `src/app/(dashboard)/settings/pricing/global-params-panel.tsx`: receber `initial` props
+- [x] T010 [US2] `src/app/(dashboard)/settings/pricing/global-params-panel.tsx`: receber `initial` props
       e inicializar o estado com os valores salvos.
-- [ ] T011 [US2] `src/app/actions/catalog.ts` (`setGlobalParams`): chamar `recalcAllCosts(db)` após
+- [x] T011 [US2] `src/app/actions/catalog.ts` (`setGlobalParams`): chamar `recalcAllCosts(db)` após
       gravar os settings.
 
 **Checkpoint**: US2 funcional.
@@ -78,12 +78,12 @@ máquina em linhas separadas; total = soma das linhas.
 
 ### Tests for User Story 3 ⚠️ (obrigatório — constitution §III)
 
-- [ ] T012 [P] [US3] Unit test `tests/fees.test.ts`: salvar `20` → `channel_fee_bps_shopee = 2000`.
+- [x] T012 [P] [US3] Unit test `tests/fees.test.ts`: salvar `20` → `channel_fee_bps_shopee = 2000`.
 
 ### Implementation for User Story 3
 
-- [ ] T013 [US3] `src/app/actions/sales-fees.ts` (`setChannelFeeFrom`): gravar `bps = valor × 100`.
-- [ ] T014 [P] [US3] Migração `0005_pricing_corrections.sql`: corrigir `channel_fee_bps_shopee` 20→2000
+- [x] T013 [US3] `src/app/actions/sales-fees.ts` (`setChannelFeeFrom`): gravar `bps = valor × 100`.
+- [x] T014 [P] [US3] Migração `0005_pricing_corrections.sql`: corrigir `channel_fee_bps_shopee` 20→2000
       e `channel_fee_bps_tiktok` 16→1600 (idempotente).
 
 **Checkpoint**: US3 funcional.
@@ -94,7 +94,7 @@ máquina em linhas separadas; total = soma das linhas.
 
 **Goal**: Valores reais aplicados e variantes existentes recalculadas.
 
-- [ ] T015 [US4] Migração `0005_pricing_corrections.sql`: upsert `kwh_rate_cents = 88` e
+- [x] T015 [US4] Migração `0005_pricing_corrections.sql`: upsert `kwh_rate_cents = 88` e
       `labor_cost_per_hour_cents = 1289`.
 - [ ] T016 [US4] Script `src/lib/db/recalc-costs.ts`: rodar `recalcAllCosts(db)` sobre o banco real
       (refresh de `costCents` e `suggestedPriceCents`; praticado congelado).
@@ -105,10 +105,16 @@ máquina em linhas separadas; total = soma das linhas.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T017 Atualizar `docs/domain.md` com a regra corrigida (mão de obra só manual; energia/máquina).
-- [ ] T018 Rodar `biome check` (lint + format) e `tsc --noEmit` (typecheck) e corrigir pendências.
-- [ ] T019 Rodar `vitest` completo e validar o Porta Caneta (custo ~R$ 16–17; sugerido Shopee ~R$ 40–41
+- [x] T017 Atualizar `docs/domain.md` com a regra corrigida (mão de obra só manual; energia/máquina).
+- [ ] T018 Rodar `pnpm lint:check` e `pnpm typecheck` e corrigir pendências.
+- [ ] T019 Rodar `pnpm test` completo e validar o Porta Caneta (custo ~R$ 16–17; sugerido Shopee ~R$ 40–41
       com taxa 20% corrigida; praticado R$ 39,99 congelado).
+
+**Status de sincronização (2026-09-19)**: as mudanças de domínio e implementação desta feature
+estão refletidas no código (`src/lib/domain/cost.ts`, `src/lib/domain/printer.ts`,
+`src/lib/catalog/service.ts`, painel de precificação e migração `0005`). Permanecem pendentes
+apenas a validação completa de lint/typecheck/testes e a conferência manual do cenário Porta Caneta
+no banco real.
 
 ---
 

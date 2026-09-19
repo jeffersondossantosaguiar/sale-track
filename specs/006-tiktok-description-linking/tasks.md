@@ -16,18 +16,18 @@
 
 ### Tests for User Story 1 ⚠️ (escrever primeiro; devem FALHAR antes da implementação)
 
-- [ ] T001 [P] [US1] Teste de `itemMatchKey` por canal em `tests/xml-link.test.ts`
-- [ ] T002 [P] [US1] Teste de `linkItems`/`linkCProd` com chave por canal (TikTok descrição; Shopee cProd) em `tests/xml-link.test.ts`
-- [ ] T003 [US1] Teste de `listUnlinkedGroups` agrupando TikTok por descrição em `tests/unlinked.test.ts`
-- [ ] T004 [US1] Teste de `linkUnlinkedToVariant` com backfill por descrição (só casa a descrição certa) em `tests/unlinked.test.ts`
-- [ ] T005 [US1] Teste de auto-vínculo de novo import TikTok por descrição em `tests/unlinked.test.ts`
+- [x] T001 [P] [US1] Teste de `itemMatchKey` por canal em `tests/xml-link.test.ts`
+- [x] T002 [P] [US1] Teste de `linkItems`/`linkCProd` com chave por canal (TikTok descrição; Shopee cProd) em `tests/xml-link.test.ts`
+- [x] T003 [US1] Teste de `listUnlinkedGroups` agrupando TikTok por descrição em `tests/unlinked.test.ts`
+- [x] T004 [US1] Teste de `linkUnlinkedToVariant` com backfill por descrição (só casa a descrição certa) em `tests/unlinked.test.ts`
+- [x] T005 [US1] Teste de auto-vínculo de novo import TikTok por descrição em `tests/unlinked.test.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Adicionar `itemMatchKey(channel, item)` + refatorar `linkItems` para usar a chave por canal em `src/lib/xml/link.ts`
-- [ ] T007 [US1] `listUnlinkedGroups` agrupar por chave por canal (`CASE WHEN channel='tiktok' THEN description ELSE c_prod END`) em `src/lib/catalog/service.ts`
-- [ ] T008 [US1] `linkUnlinkedToVariant` aprender/backfill por descrição no TikTok (usa a chave) em `src/lib/catalog/service.ts`
-- [ ] T009 [US1] Ajustar `unlinked-panel.tsx` para chave de grupo por descrição (TikTok) e tooltip — `src/app/(dashboard)/products/unlinked-panel.tsx`
+- [x] T006 [US1] Adicionar `itemMatchKey(channel, item)` + refatorar `linkItems` para usar a chave por canal em `src/lib/xml/link.ts`
+- [x] T007 [US1] `listUnlinkedGroups` agrupar por chave por canal (`CASE WHEN channel='tiktok' THEN description ELSE c_prod END`) em `src/lib/catalog/service.ts`
+- [x] T008 [US1] `linkUnlinkedToVariant` aprender/backfill por descrição no TikTok (usa a chave) em `src/lib/catalog/service.ts`
+- [x] T009 [US1] Ajustar `unlinked-panel.tsx` para chave de grupo por descrição (TikTok) e tooltip — `src/app/(dashboard)/products/unlinked-panel.tsx`
 
 **Checkpoint**: US1 funcional e testado isoladamente.
 
@@ -41,12 +41,12 @@
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T010 [P] [US2] Teste de reparo: desvincula TikTok cujo produto não está na descrição e mantém o correto em `tests/catalog.test.ts`
-- [ ] T011 [P] [US2] Teste de idempotência: rodar o reparo duas vezes não altera nada na 2ª em `tests/catalog.test.ts`
+- [x] T010 [P] [US2] Teste de reparo: desvincula TikTok cujo produto não está na descrição e mantém o correto em `tests/catalog.test.ts`
+- [x] T011 [P] [US2] Teste de idempotência: rodar o reparo duas vezes não altera nada na 2ª em `tests/catalog.test.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Implementar `repairTikTokLinks` em `src/lib/catalog/service.ts`, `repairTikTokLinksAction` em `src/app/actions/catalog.ts` e botão "Reparar vínculos TikTok" em `unlinked-panel.tsx`
+- [x] T012 [US2] Implementar `repairTikTokLinks` em `src/lib/catalog/service.ts`, `repairTikTokLinksAction` em `src/app/actions/catalog.ts` e botão "Reparar vínculos TikTok" em `unlinked-panel.tsx`
 
 **Checkpoint**: US1 e US2 funcionando de forma independente.
 
@@ -56,7 +56,13 @@
 
 - [ ] T013 [P] Rodar `pnpm test`, `pnpm typecheck`, `pnpm lint:check`
 - [ ] T014 Rodar o botão/`repairTikTokLinks` e verificar no banco real (Ash Greninja ~36; Luffy/Sauron/etc. na fila)
-- [ ] T015 Atualizar `spec.md`/checklists conforme resultados (se aplicável)
+- [x] T015 Atualizar `spec.md`/checklists conforme resultados (se aplicável)
+
+**Status de sincronização (2026-09-19)**: US1 e US2 já estão refletidas no código e nos testes
+(`src/lib/xml/link.ts`, `src/lib/catalog/service.ts`, `src/app/actions/catalog.ts`,
+`src/app/(dashboard)/products/unlinked-panel.tsx`, `tests/xml-link.test.ts`,
+`tests/unlinked.test.ts`, `tests/catalog.test.ts`). Ficam pendentes apenas a validação completa
+de pipeline e a execução/verificação no banco real.
 
 ---
 
