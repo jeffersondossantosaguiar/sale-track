@@ -1,5 +1,13 @@
 # Sale Track — controle de vendas (MEI / impressão 3D)
 
+## Como usar esta documentação
+
+Este arquivo descreve somente o estado atual implementado do domínio. Visão futura, capacidades planejadas e ordem de evolução ficam separadas em:
+
+- [Visão do Produto](product-vision.md) — objetivo, princípios, fluxos e limites do ERP vertical.
+- [Mapa de Capacidades](capability-map.md) — estado, alvo, dependências e riscos por domínio.
+- [Roadmap](roadmap.md) — horizontes, próximas iniciativas e playbook SDD para novas features.
+
 ## Fonte de verdade
 - **Realizado por canal:**
   - **Shopee / TikTok:** vendas entram **automaticamente** pela importação do XML da NFe (modelo 55, mercadoria). No Shopee/TikTok **só dá para enviar pedido emitindo NFe** → todo pedido de marketplace tem XML, o import cobre 100% deles por construção.
@@ -55,7 +63,7 @@
 ## Stack / operação
 - **Next.js fullstack** (App Router + Server Actions) + **SQLite** (Drizzle + better-sqlite3) + **Tailwind + ShadCN + Biome**, **Node LTS**.
 - App **local**, single-user, sem login; abre no navegador (acessível do celular na mesma rede Wi-Fi).
-- Backup simples: copiar o arquivo SQLite (botão de exportar backup/CSV).
+- Os dados ficam em um arquivo SQLite local, que pode ser copiado manualmente com o app fechado. Há exportação do extrato mensal em CSV, mas ainda não existe um fluxo guiado de backup e restauração do banco.
 
 ## Fora de escopo (fase atual)
 - Integração com APIs de Shopee/TikTok (fase futura, o stack permite).
