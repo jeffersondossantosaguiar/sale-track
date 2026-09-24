@@ -26,7 +26,8 @@ describe("GET /api/catalog-images/{ownerType}/{ownerId}", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("image/jpeg");
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-      expect(response.headers.get("cache-control")).toContain("private");
+      expect(response.headers.get("cache-control")).toBe("private, no-cache");
+      expect(response.headers.get("content-disposition")).toBe('inline; filename="tiny.jpg"');
       expect(response.headers.get("content-length")).toBe(String(upload("tiny.jpg", "image/jpeg").bytes.length));
       expect(Buffer.from(await response.arrayBuffer()).length).toBeGreaterThan(0);
     } finally {

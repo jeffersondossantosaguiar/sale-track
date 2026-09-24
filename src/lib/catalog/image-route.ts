@@ -27,11 +27,17 @@ export async function getCatalogImageResponse(
       headers: {
         "Content-Type": opened.mime,
         "Content-Length": String(opened.bytes),
+        "Content-Disposition": `inline; filename="${safeFilename(opened.originalName)}"`,
         "X-Content-Type-Options": "nosniff",
-        "Cache-Control": "private, max-age=60",
+        "Cache-Control": "private, no-cache",
       },
     });
   } catch {
     return NextResponse.json({ error: "arquivo de imagem não encontrado" }, { status: 404 });
   }
+}
+
+function safeFilename(name: string): string {
+  const cleaned = name.replace(/[/\\"]/g, "_").trim();
+  return cleaned || "catalog-image";
 }

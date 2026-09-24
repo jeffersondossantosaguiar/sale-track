@@ -5,7 +5,7 @@ description: "Implementation tasks for the master product catalog"
 
 # Tasks: Catálogo mestre de produtos e variantes
 
-**Status**: Approved — implementation deferred by user on 2026-09-19
+**Status**: Complete — implemented, validated and reset accepted on 2026-09-24
 
 **Input**: Design documents from `/specs/008-master-product-catalog/`
 
@@ -25,8 +25,8 @@ description: "Implementation tasks for the master product catalog"
 
 **Purpose**: Preparar fixtures e isolamento de mídia para o ciclo red-green.
 
-- [ ] T001 [P] Criar fixtures mínimas JPEG, PNG, WebP, assinatura inválida e arquivo acima de 5 MiB em `tests/fixtures/images/`
-- [ ] T002 [P] Estender `tests/helpers/db.ts` com diretório temporário isolado para `CatalogMediaStore` e limpeza de banco + mídia após cada teste
+- [x] T001 [P] Criar fixtures mínimas JPEG, PNG, WebP, assinatura inválida e arquivo acima de 5 MiB em `tests/fixtures/images/`
+- [x] T002 [P] Estender `tests/helpers/db.ts` com diretório temporário isolado para `CatalogMediaStore` e limpeza de banco + mídia após cada teste
 
 ---
 
@@ -38,16 +38,16 @@ description: "Implementation tasks for the master product catalog"
 
 ### Tests first
 
-- [ ] T003 [P] Escrever testes inicialmente falhos para colunas nullable, invariantes de imagem, SKU único normalizado e unicidade `(channel, normalizedCode)` em `tests/catalog-schema.test.ts`
-- [ ] T004 [P] Escrever testes inicialmente falhos para campos opcionais, limites (`name` 1–120, SKU 1–60, atributos 60/80/120, notas 2.000), normalização uppercase do SKU e vazio→`null` em `tests/catalog-domain.test.ts`
-- [ ] T005 [P] Escrever testes inicialmente falhos de `save/open/delete`, MIME+assinatura, limite de 5 MiB, chaves opacas e bloqueio de path traversal em `tests/catalog-images.test.ts`
+- [x] T003 [P] Escrever testes inicialmente falhos para colunas nullable, invariantes de imagem, SKU único normalizado e unicidade `(channel, normalizedCode)` em `tests/catalog-schema.test.ts`
+- [x] T004 [P] Escrever testes inicialmente falhos para campos opcionais, limites (`name` 1–120, SKU 1–60, atributos 60/80/120, notas 2.000), normalização uppercase do SKU e vazio→`null` em `tests/catalog-domain.test.ts`
+- [x] T005 [P] Escrever testes inicialmente falhos de `save/open/delete`, MIME+assinatura, limite de 5 MiB, chaves opacas e bloqueio de path traversal em `tests/catalog-images.test.ts`
 
 ### Implementation
 
-- [ ] T006 Gerar e revisar a migração versionada `src/lib/db/migrations/0008_master_product_catalog.sql` e atualizar `src/lib/db/schema.ts` com atributos, overrides, metadados de mídia e `product_codes.channel/normalizedCode`
-- [ ] T007 Implementar normalizadores e schemas Zod de produto, variante, imagem, filtros, SKU e código de canal em `src/lib/domain/catalog.ts` até T004 ficar verde
-- [ ] T008 Implementar `CatalogMediaStore` local com raiz `data/catalog-media/`, gravação temporária + rename atômico, chaves geradas, leitura confinada e delete idempotente em `src/lib/catalog/media-store.ts` até T005 ficar verde
-- [ ] T009 Atualizar os tipos de linha e helpers de valor efetivo `override ?? product` sem carregar conteúdo binário em `src/lib/catalog/service.ts`, preservando as projeções exercitadas após T006
+- [x] T006 Gerar e revisar a migração versionada `src/lib/db/migrations/0008_master_product_catalog.sql` e atualizar `src/lib/db/schema.ts` com atributos, overrides, metadados de mídia e `product_codes.channel/normalizedCode`
+- [x] T007 Implementar normalizadores e schemas Zod de produto, variante, imagem, filtros, SKU e código de canal em `src/lib/domain/catalog.ts` até T004 ficar verde
+- [x] T008 Implementar `CatalogMediaStore` local com raiz `data/catalog-media/`, gravação temporária + rename atômico, chaves geradas, leitura confinada e delete idempotente em `src/lib/catalog/media-store.ts` até T005 ficar verde
+- [x] T009 Atualizar os tipos de linha e helpers de valor efetivo `override ?? product` sem carregar conteúdo binário em `src/lib/catalog/service.ts`, preservando as projeções exercitadas após T006
 
 **Checkpoint**: Schema migrado, domínio validado e mídia local isolada estão prontos.
 
@@ -61,16 +61,16 @@ description: "Implementation tasks for the master product catalog"
 
 ### Tests first
 
-- [ ] T010 [P] [US1] Escrever testes inicialmente falhos para criação transacional de produto + primeira variante + preços, atributos opcionais, substituição/remoção de imagem e rollback de arquivo/banco em `tests/catalog-master.test.ts`
-- [ ] T011 [P] [US1] Escrever testes inicialmente falhos do contrato GET product/variant, fallback de imagem, headers, 400, 404 e arquivo ausente em `tests/catalog-image-route.test.ts`
+- [x] T010 [P] [US1] Escrever testes inicialmente falhos para criação transacional de produto + primeira variante + preços, atributos opcionais, substituição/remoção de imagem e rollback de arquivo/banco em `tests/catalog-master.test.ts`
+- [x] T011 [P] [US1] Escrever testes inicialmente falhos do contrato GET product/variant, fallback de imagem, headers, 400, 404 e arquivo ausente em `tests/catalog-image-route.test.ts`
 
 ### Implementation
 
-- [ ] T012 [US1] Implementar criação transacional e edição do produto mestre, incluindo compensação de arquivos em falha e preservação da imagem anterior, em `src/lib/catalog/service.ts`
-- [ ] T013 [US1] Evoluir parsing de `FormData`, respostas tipadas e revalidação para produto + primeira variante + upload opcional em `src/app/actions/catalog.ts`
-- [ ] T014 [US1] Implementar `GET /api/catalog-images/{ownerType}/{ownerId}` com fallback da variante, streaming local, `nosniff` e sem exposição de caminho em `src/app/api/catalog-images/[ownerType]/[ownerId]/route.ts`
-- [ ] T015 [US1] Implementar fluxo único de novo produto e edição das seções identidade, atributos e imagem em `src/app/(dashboard)/products/products-panel.tsx`
-- [ ] T016 [US1] Executar `tests/catalog-master.test.ts` e `tests/catalog-image-route.test.ts` e corrigir somente a implementação até ambos ficarem verdes
+- [x] T012 [US1] Implementar criação transacional e edição do produto mestre, incluindo compensação de arquivos em falha e preservação da imagem anterior, em `src/lib/catalog/service.ts`
+- [x] T013 [US1] Evoluir parsing de `FormData`, respostas tipadas e revalidação para produto + primeira variante + upload opcional em `src/app/actions/catalog.ts`
+- [x] T014 [US1] Implementar `GET /api/catalog-images/{ownerType}/{ownerId}` com fallback da variante, streaming local, `nosniff` e sem exposição de caminho em `src/app/api/catalog-images/[ownerType]/[ownerId]/route.ts`
+- [x] T015 [US1] Implementar fluxo único de novo produto e edição das seções identidade, atributos e imagem em `src/app/(dashboard)/products/products-panel.tsx`
+- [x] T016 [US1] Executar `tests/catalog-master.test.ts` e `tests/catalog-image-route.test.ts` e corrigir somente a implementação até ambos ficarem verdes
 
 **Checkpoint**: Produto mestre com primeira unidade vendável pode ser cadastrado e editado independentemente.
 
@@ -84,14 +84,14 @@ description: "Implementation tasks for the master product catalog"
 
 ### Tests first
 
-- [ ] T017 [P] [US2] Escrever testes inicialmente falhos para SKU case/space-insensitive, herança, overrides nullable, remoção de override, imagem efetiva e proteção da última variante em `tests/catalog-variants.test.ts`
+- [x] T017 [P] [US2] Escrever testes inicialmente falhos para SKU case/space-insensitive, herança, overrides nullable, remoção de override, imagem efetiva e proteção da última variante em `tests/catalog-variants.test.ts`
 
 ### Implementation
 
-- [ ] T018 [US2] Implementar CRUD de variantes, normalização persistida do SKU, valores efetivos e ciclo de vida da imagem própria em `src/lib/catalog/service.ts`
-- [ ] T019 [US2] Evoluir ações de variante para campos sobrescrevíveis, `useProductValue` e intenção explícita de manter/substituir/remover imagem em `src/app/actions/catalog.ts`
-- [ ] T020 [US2] Implementar editor de variante com origem herdada/sobrescrita, comando “Usar valor do produto” e preview efetivo em `src/app/(dashboard)/products/products-panel.tsx`
-- [ ] T021 [US2] Executar `tests/catalog-variants.test.ts` junto com `tests/catalog-master.test.ts` e corrigir regressões até ambos ficarem verdes
+- [x] T018 [US2] Implementar CRUD de variantes, normalização persistida do SKU, valores efetivos e ciclo de vida da imagem própria em `src/lib/catalog/service.ts`
+- [x] T019 [US2] Evoluir ações de variante para campos sobrescrevíveis, `useProductValue` e intenção explícita de manter/substituir/remover imagem em `src/app/actions/catalog.ts`
+- [x] T020 [US2] Implementar editor de variante com origem herdada/sobrescrita, comando “Usar valor do produto” e preview efetivo em `src/app/(dashboard)/products/products-panel.tsx`
+- [x] T021 [US2] Executar `tests/catalog-variants.test.ts` junto com `tests/catalog-master.test.ts` e corrigir regressões até ambos ficarem verdes
 
 **Checkpoint**: Variantes e SKUs funcionam sem duplicar os dados compartilhados do produto.
 
@@ -105,17 +105,17 @@ description: "Implementation tasks for the master product catalog"
 
 ### Tests first
 
-- [ ] T022 [P] [US3] Atualizar testes inicialmente falhos para canal não nulo, `normalizedCode`, unicidade por canal, fallback `geral` e rejeição de `Padrao` TikTok em `tests/codes.test.ts`
-- [ ] T023 [P] [US3] Adicionar regressões inicialmente falhas para Shopee por `cProd`, TikTok por descrição e imutabilidade de `frozenCostCents` em `tests/integration-import.test.ts` e `tests/unlinked.test.ts`
-- [ ] T024 [P] [US3] Adicionar regressões de custo e preço garantindo que atributos/imagens não recalculam valores e insumos continuam recalculando em `tests/cost.test.ts` e `tests/pricing.test.ts`
+- [x] T022 [P] [US3] Atualizar testes inicialmente falhos para canal não nulo, `normalizedCode`, unicidade por canal, fallback `geral` e rejeição de `Padrao` TikTok em `tests/codes.test.ts`
+- [x] T023 [P] [US3] Adicionar regressões inicialmente falhas para Shopee por `cProd`, TikTok por descrição e imutabilidade de `frozenCostCents` em `tests/integration-import.test.ts` e `tests/unlinked.test.ts`
+- [x] T024 [P] [US3] Adicionar regressões de custo e preço garantindo que atributos/imagens não recalculam valores e insumos continuam recalculando em `tests/cost.test.ts` e `tests/pricing.test.ts`
 
 ### Implementation
 
-- [ ] T025 [US3] Implementar normalização de código, canal canônico `geral|shopee|tiktok` e rejeição TikTok em `src/lib/domain/catalog.ts` e `src/lib/catalog/service.ts`
-- [ ] T026 [US3] Adaptar lookup, ranking de canal e vínculo por chave normalizada sem mutar custo congelado em `src/lib/xml/link.ts` e `src/lib/xml/importer.ts`
-- [ ] T027 [US3] Atualizar ações de códigos e compatibilidade de payloads do catálogo em `src/app/actions/catalog.ts`
-- [ ] T028 [US3] Reorganizar no editor de variante as seções produção/custo, preços e códigos por canal em `src/app/(dashboard)/products/products-panel.tsx`
-- [ ] T029 [US3] Executar `tests/codes.test.ts`, `tests/integration-import.test.ts`, `tests/unlinked.test.ts`, `tests/cost.test.ts` e `tests/pricing.test.ts` até a regressão financeira completa ficar verde
+- [x] T025 [US3] Implementar normalização de código, canal canônico `geral|shopee|tiktok` e rejeição TikTok em `src/lib/domain/catalog.ts` e `src/lib/catalog/service.ts`
+- [x] T026 [US3] Adaptar lookup, ranking de canal e vínculo por chave normalizada sem mutar custo congelado em `src/lib/xml/link.ts` e `src/lib/xml/importer.ts`
+- [x] T027 [US3] Atualizar ações de códigos e compatibilidade de payloads do catálogo em `src/app/actions/catalog.ts`
+- [x] T028 [US3] Reorganizar no editor de variante as seções produção/custo, preços e códigos por canal em `src/app/(dashboard)/products/products-panel.tsx`
+- [x] T029 [US3] Executar `tests/codes.test.ts`, `tests/integration-import.test.ts`, `tests/unlinked.test.ts`, `tests/cost.test.ts` e `tests/pricing.test.ts` até a regressão financeira completa ficar verde
 
 **Checkpoint**: Catálogo renovado mantém o contrato financeiro e de integração existente.
 
@@ -129,18 +129,18 @@ description: "Implementation tasks for the master product catalog"
 
 ### Tests first
 
-- [ ] T030 [P] [US4] Escrever testes inicialmente falhos para busca por produto/variante/SKU, filtros combinados, valores efetivos e status `active|inactive|all` em `tests/catalog-filters.test.ts`
-- [ ] T031 [P] [US4] Escrever testes inicialmente falhos garantindo que produtos ou variantes inativos continuam consultáveis no catálogo, mas não aparecem em novas vendas presenciais nem seletores de vínculo em `tests/catalog-active-selection.test.ts`
-- [ ] T032 [P] [US4] Escrever benchmark determinístico inicialmente falho para listar, buscar e filtrar 1.000 produtos e 5.000 variantes em até 200 ms no ambiente de teste local em `tests/catalog-performance.test.ts`
+- [x] T030 [P] [US4] Escrever testes inicialmente falhos para busca por produto/variante/SKU, filtros combinados, valores efetivos e status `active|inactive|all` em `tests/catalog-filters.test.ts`
+- [x] T031 [P] [US4] Escrever testes inicialmente falhos garantindo que produtos ou variantes inativos continuam consultáveis no catálogo, mas não aparecem em novas vendas presenciais nem seletores de vínculo em `tests/catalog-active-selection.test.ts`
+- [x] T032 [P] [US4] Escrever benchmark determinístico inicialmente falho para listar, buscar e filtrar 1.000 produtos e 5.000 variantes em até 200 ms no ambiente de teste local em `tests/catalog-performance.test.ts`
 
 ### Implementation
 
-- [ ] T033 [US4] Implementar e otimizar `listCatalog` server-side com resultados distintos por produto, variantes correspondentes, índices adequados e sem conteúdo de mídia em `src/lib/catalog/service.ts` até T030 e T032 ficarem verdes
-- [ ] T034 [US4] Aplicar a regra de elegibilidade ativa nos provedores de seleção de novas vendas e vínculos em `src/lib/catalog/service.ts` e `src/app/(dashboard)/sales/presential.tsx` até T031 ficar verde
-- [ ] T035 [US4] Expor filtros tipados e estado da consulta na página e ações em `src/app/(dashboard)/products/page.tsx` e `src/app/actions/catalog.ts`
-- [ ] T036 [US4] Redesenhar barra de pesquisa, filtros compactos, lista estável e navegação mestre-detalhe responsiva em `src/app/(dashboard)/products/products-panel.tsx`
-- [ ] T037 [US4] Manter a fila de não vinculados funcional com a nova seleção por SKU/nome e canais canônicos em `src/app/(dashboard)/products/unlinked-panel.tsx`
-- [ ] T038 [US4] Executar `tests/catalog-filters.test.ts`, `tests/catalog-active-selection.test.ts`, `tests/catalog-performance.test.ts`, `tests/unlinked.test.ts` e `tests/catalog-variants.test.ts` até busca, filtros, desempenho e elegibilidade ficarem verdes
+- [x] T033 [US4] Implementar e otimizar `listCatalog` server-side com resultados distintos por produto, variantes correspondentes, índices adequados e sem conteúdo de mídia em `src/lib/catalog/service.ts` até T030 e T032 ficarem verdes
+- [x] T034 [US4] Aplicar a regra de elegibilidade ativa nos provedores de seleção de novas vendas e vínculos em `src/lib/catalog/service.ts` e `src/app/(dashboard)/sales/presential.tsx` até T031 ficar verde
+- [x] T035 [US4] Expor filtros tipados e estado da consulta na página e ações em `src/app/(dashboard)/products/page.tsx` e `src/app/actions/catalog.ts`
+- [x] T036 [US4] Redesenhar barra de pesquisa, filtros compactos, lista estável e navegação mestre-detalhe responsiva em `src/app/(dashboard)/products/products-panel.tsx`
+- [x] T037 [US4] Manter a fila de não vinculados funcional com a nova seleção por SKU/nome e canais canônicos em `src/app/(dashboard)/products/unlinked-panel.tsx`
+- [x] T038 [US4] Executar `tests/catalog-filters.test.ts`, `tests/catalog-active-selection.test.ts`, `tests/catalog-performance.test.ts`, `tests/unlinked.test.ts` e `tests/catalog-variants.test.ts` até busca, filtros, desempenho e elegibilidade ficarem verdes
 
 **Checkpoint**: O catálogo completo é operável e cada classe de dado é identificável.
 
@@ -150,11 +150,11 @@ description: "Implementation tasks for the master product catalog"
 
 **Purpose**: Fechar portabilidade, reset, documentação e qualidade global.
 
-- [ ] T039 [P] Adicionar testes de backup/restauração de chave relativa, mídia ausente e limpeza compensatória em `tests/catalog-images.test.ts`
-- [ ] T040 Atualizar o estado real do catálogo, campos, herança, mídia local e códigos por canal em `docs/domain.md`
-- [ ] T041 Executar a suíte completa e gates `npm test`, `npm run typecheck`, `npm run lint:check` e `npm run build`, corrigindo qualquer regressão nos arquivos alterados antes do reset
-- [ ] T042 Executar o reset autorizado somente após T041, removendo `data/sale-track.db`, arquivos WAL/SHM e `data/catalog-media/`, depois aplicar migrações/seed e verificar contagens conforme `specs/008-master-product-catalog/quickstart.md`
-- [ ] T043 Validar manualmente todos os cenários desktop/mobile, herança, mídia, canais e backup/restauração descritos em `specs/008-master-product-catalog/quickstart.md`
+- [x] T039 [P] Adicionar testes de backup/restauração de chave relativa, mídia ausente e limpeza compensatória em `tests/catalog-images.test.ts`
+- [x] T040 Atualizar o estado real do catálogo, campos, herança, mídia local e códigos por canal em `docs/domain.md`
+- [x] T041 Executar a suíte completa e gates `npm test`, `npm run typecheck`, `npm run lint:check` e `npm run build`, corrigindo qualquer regressão nos arquivos alterados antes do reset
+- [x] T042 Executar o reset autorizado somente após T041, removendo `data/sale-track.db`, arquivos WAL/SHM e `data/catalog-media/`, depois aplicar migrações/seed e verificar contagens conforme `specs/008-master-product-catalog/quickstart.md`
+- [x] T043 Validar manualmente todos os cenários desktop/mobile, herança, mídia, canais e backup/restauração descritos em `specs/008-master-product-catalog/quickstart.md`
 
 ---
 
