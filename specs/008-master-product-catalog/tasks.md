@@ -245,11 +245,11 @@ Task T024: regressões de custo e preço
 
 **Purpose**: Fechar os gaps encontrados após a implementação inicial e antes do aceite final da feature.
 
-- [ ] T044 Implementar fluxo de criação que colete produto mestre + primeira variante + SKU revisável antes de concluir o cadastro, evitando SKU temporário invisível, per FR-017 / US1 AC1 / T015 (partial)
-- [ ] T045 Adicionar testes do contrato `GET /api/catalog-images/{ownerType}/{ownerId}` para product/variant, fallback, headers, 400, 404 e arquivo ausente em `tests/catalog-image-route.test.ts`, per T011 / T016 / contract: catalog-images (missing)
-- [ ] T046 Expor filtros tipados de categoria, tipo, tema, cor, tamanho, acabamento e estado na página `/products` e conectar a experiência a `listCatalog`, per FR-015 / US4 AC2 / T035 / T036 (partial)
-- [ ] T047 Diferenciar visualmente valor herdado, sobrescrito, interno e específico de canal no editor de variante sem depender apenas de placeholder ou cor, per FR-016 / US4 AC3 / contract: catalog-ui (partial)
-- [ ] T048 Adicionar testes de backup/restauração de chave relativa, mídia ausente e limpeza compensatória em `tests/catalog-images.test.ts`, per T039 / quickstart §9 (missing)
-- [ ] T049 Resolver o gate de build para que `npm run build` passe de forma reproduzível no ambiente do projeto, documentando ou ajustando o script/configuração do Next quando necessário, per T041 / plan: static and automated checks (partial)
-- [ ] T050 Executar o reset controlado somente após T049, removendo DB/WAL/SHM e `data/catalog-media/`, aplicando migrações/seed e verificando contagens operacionais zeradas, per FR-019–FR-021 / SC-007 / T042 (missing)
-- [ ] T051 Validar manualmente os cenários do `quickstart.md` em desktop e mobile, incluindo herança, imagem, canais, backup/restauração e ausência de sobreposição visual, per T043 / quickstart §§4–10 (missing)
+- [x] T044 Implementar fluxo de criação que colete produto mestre + primeira variante + SKU revisável antes de concluir o cadastro, evitando SKU temporário invisível, per FR-017 / US1 AC1 / T015
+- [x] T045 Adicionar testes do contrato `GET /api/catalog-images/{ownerType}/{ownerId}` para product/variant, fallback, headers, 400, 404 e arquivo ausente em `tests/catalog-image-route.test.ts`, per T011 / T016 / contract: catalog-images
+- [x] T046 Expor filtros tipados de categoria, tipo, tema, cor, tamanho, acabamento e estado na página `/products` e conectar a experiência a `listCatalog`, per FR-015 / US4 AC2 / T035 / T036
+- [x] T047 Diferenciar visualmente valor herdado, sobrescrito, interno e específico de canal no editor de variante sem depender apenas de placeholder ou cor, per FR-016 / US4 AC3 / contract: catalog-ui
+- [x] T048 Adicionar testes de backup/restauração de chave relativa, mídia ausente e limpeza compensatória em `tests/catalog-images.test.ts`, per T039 / quickstart §9
+- [x] T049 Resolver o gate de build para que `npm run build` passe de forma reproduzível no ambiente do projeto, documentando ou ajustando o script/configuração do Next quando necessário, per T041 / plan: static and automated checks
+- [x] T050 Executar o reset controlado somente após T049, removendo DB/WAL/SHM e `data/catalog-media/`, aplicando migrações/seed e verificando contagens operacionais zeradas, per FR-019–FR-021 / SC-007 / T042
+- [x] T051 Validar manualmente os cenários do `quickstart.md` em desktop e mobile, incluindo herança, imagem, canais, backup/restauração e ausência de sobreposição visual, per T043 / quickstart §§4–10

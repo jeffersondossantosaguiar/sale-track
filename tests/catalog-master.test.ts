@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { CatalogMediaStore } from "@/lib/catalog/media-store";
 import {
   createProduct,
+  createProductWithFirstVariant,
   getCatalogImageMetadata,
   listVariants,
   replaceProductImage,
@@ -11,6 +12,38 @@ import { describe, expect, it } from "vitest";
 import { IMAGE_FIXTURES_DIR, setupTestDbWithMedia } from "./helpers/db";
 
 describe("master product catalog", () => {
+  it("cadastra produto mestre com primeira variante e SKU informado, sem SKU temporário", () => {
+    const { db, cleanup } = setupTestDbWithMedia();
+    try {
+      const product = createProductWithFirstVariant(
+        { name: "Mini Charmander", categoryId: null, primaryColor: "Laranja" },
+        {
+          sku: "char-001",
+          name: "Charmander 12cm",
+          printTimeMin: 0,
+          manualTimeMin: 0,
+          filamentMaterialId: null,
+          filamentGrams: 0,
+          packagingCents: 0,
+          accessoriesCents: 0,
+        },
+        { db },
+      );
+      expect(product.ok).toBe(true);
+      if (!product.ok) return;
+      const variants = listVariants(product.value.id, { db });
+      expect(variants).toHaveLength(1);
+      expect(variants[0]).toMatchObject({
+        id: product.value.variantId,
+        sku: "CHAR-001",
+        name: "Charmander 12cm",
+        effectiveColor: "Laranja",
+      });
+    } finally {
+      cleanup();
+    }
+  });
+
   it("cadastra produto mestre, primeira variante e imagem com fallback para variante", async () => {
     const { db, mediaRoot, cleanup } = setupTestDbWithMedia();
     try {

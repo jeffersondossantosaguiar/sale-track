@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { CatalogMediaStore } from "@/lib/catalog/media-store";
+import { createProduct, replaceProductImage } from "@/lib/catalog/service";
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { IMAGE_FIXTURES_DIR, setupTestDbWithMedia } from "./helpers/db";
 
@@ -31,6 +33,48 @@ describe("CatalogMediaStore", () => {
       await expect(store.save(file("too-large.jpg", "image/jpeg"))).rejects.toThrow(/5 MiB/i);
       await expect(store.save(file("tiny.jpg", "image/gif"))).rejects.toThrow();
       expect(() => store.confinedPath("../sale-track.db")).toThrow(/chave/i);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("mantem chave relativa restauravel em outra raiz e falha quando a midia restaurada esta ausente", async () => {
+    const source = setupTestDbWithMedia();
+    const target = setupTestDbWithMedia();
+    try {
+      const sourceStore = new CatalogMediaStore(source.mediaRoot);
+      const saved = await sourceStore.save(file("tiny.jpg", "image/jpeg"));
+      const restoredStore = new CatalogMediaStore(target.mediaRoot);
+      expect(saved.key).toBe(basename(saved.key));
+      await expect(restoredStore.open(saved)).rejects.toThrow();
+    } finally {
+      source.cleanup();
+      target.cleanup();
+    }
+  });
+
+  it("remove arquivo salvo quando a persistencia no banco falha", async () => {
+    const { db, mediaRoot, cleanup } = setupTestDbWithMedia();
+    try {
+      const product = createProduct({ name: "Mini Mew", categoryId: null }, { db });
+      expect(product.ok).toBe(true);
+      if (!product.ok) return;
+      const store = new CatalogMediaStore(mediaRoot);
+      const originalSave = store.save.bind(store);
+      let savedKey: string | null = null;
+      store.save = async (input) => {
+        const saved = await originalSave(input);
+        savedKey = saved.key;
+        db.run(sql.raw("drop table products"));
+        return saved;
+      };
+      const result = await replaceProductImage(product.value.id, file("tiny.png", "image/png"), {
+        db,
+        mediaStore: store,
+      });
+      expect(result.ok).toBe(false);
+      expect(savedKey).not.toBeNull();
+      expect(savedKey && existsSync(store.confinedPath(savedKey))).toBe(false);
     } finally {
       cleanup();
     }

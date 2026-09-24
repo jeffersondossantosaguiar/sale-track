@@ -35,6 +35,11 @@ describe("catalog filters", () => {
       expect(listCatalog({ q: "pk-shiny" }, { db })).toHaveLength(1);
       expect(listCatalog({ q: "dourado" }, { db })[0]?.name).toBe("Mini Pikachu");
       expect(listCatalog({ q: "one piece" }, { db })[0]?.name).toBe("Luffy Gear");
+      expect(listCatalog({ theme: "Pokemon", color: "Dourado" }, { db })[0]?.variants.map((row) => row.sku)).toEqual([
+        "PK-SHINY",
+      ]);
+      expect(listCatalog({ color: "Amarelo" }, { db })[0]?.variants.map((row) => row.name)).toEqual(["Mini Pikachu"]);
+      expect(listCatalog({ color: "Azul" }, { db })).toHaveLength(0);
       if (shiny.ok) setVariantActive(shiny.value.id, false, { db });
       setProductActive(luffy.value.id, false, { db });
       expect(listCatalog({ status: "active" }, { db }).map((row) => row.name)).toEqual(["Mini Pikachu"]);

@@ -9,11 +9,19 @@ import {
   updateProduct,
   upsertVariantPriceAction,
 } from "@/app/actions/catalog";
-import type { CategoryRow, MaterialRow, ProductRow, VariantPriceRow, VariantRow } from "@/lib/catalog/service";
+import type {
+  CatalogFilters,
+  CatalogListRow,
+  CategoryRow,
+  MaterialRow,
+  ProductRow,
+  VariantPriceRow,
+  VariantRow,
+} from "@/lib/catalog/service";
 import { formatBRL } from "@/lib/domain/money";
 import { type ChannelFeeTier, feeForPrice } from "@/lib/domain/pricing";
 import { cn } from "@/lib/utils";
-import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
+import { Fragment, useEffect, useState, useTransition } from "react";
 
 /**
  * 002/US1–US3 — CRUD de produto → variante, com custo calculado, preços por
@@ -23,6 +31,13 @@ import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
 
 type Editor = { mode: "create" } | { mode: "edit"; product: ProductRow } | null;
 type VariantEditor = { variantId: number } | null;
+type FilterOptions = {
+  productTypes: string[];
+  themes: string[];
+  colors: string[];
+  sizes: string[];
+  finishes: string[];
+};
 
 type CostBreakdown = {
   filamentCents: number;
@@ -34,20 +49,48 @@ type CostBreakdown = {
   totalCents: number;
 };
 
+function FilterSelect({
+  name,
+  label,
+  value,
+  options,
+}: {
+  name: string;
+  label: string;
+  value?: string | null;
+  options: string[];
+}) {
+  return (
+    <select name={name} defaultValue={value ?? ""} className="rounded-md border bg-background px-2 py-1.5 text-sm">
+      <option value="">{label}</option>
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export default function ProductsPanel({
   initialProducts,
   categories,
   materials,
+  initialFilters,
+  filterOptions,
 }: {
-  initialProducts: ProductRow[];
+  initialProducts: CatalogListRow[];
   categories: CategoryRow[];
   materials: MaterialRow[];
+  initialFilters: CatalogFilters;
+  filterOptions: FilterOptions;
 }) {
   const [products, setProducts] = useState<ProductRow[]>(initialProducts);
   const [editor, setEditor] = useState<Editor>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
-  const [filter, setFilter] = useState("");
   const [name, setName] = useState("");
+  const [firstVariantSku, setFirstVariantSku] = useState("");
+  const [firstVariantName, setFirstVariantName] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [productType, setProductType] = useState("");
   const [theme, setTheme] = useState("");
@@ -70,15 +113,11 @@ export default function ProductsPanel({
     setProducts(result.data.products);
   };
 
-  const visibleProducts = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (!needle) return products;
-    return products.filter((p) => p.name.toLowerCase().includes(needle));
-  }, [products, filter]);
-
   const openCreate = () => {
     setEditor({ mode: "create" });
     setName("");
+    setFirstVariantSku("");
+    setFirstVariantName("");
     setCategoryId("");
     setProductType("");
     setTheme("");
@@ -94,6 +133,8 @@ export default function ProductsPanel({
   const openEdit = (product: ProductRow) => {
     setEditor({ mode: "edit", product });
     setName(product.name);
+    setFirstVariantSku("");
+    setFirstVariantName("");
     setCategoryId(product.categoryId ? String(product.categoryId) : "");
     setProductType(product.productType ?? "");
     setTheme(product.theme ?? "");
@@ -115,6 +156,10 @@ export default function ProductsPanel({
     if (!name.trim()) return;
     const form = new FormData();
     form.set("name", name);
+    if (editor?.mode === "create") {
+      form.set("firstVariantSku", firstVariantSku);
+      form.set("firstVariantName", firstVariantName || name);
+    }
     form.set("categoryId", categoryId);
     form.set("productType", productType);
     form.set("theme", theme);
@@ -166,12 +211,61 @@ export default function ProductsPanel({
 
       {products.length > 0 && (
         <div className="border-b px-4 py-3">
-          <input
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            placeholder={`Filtrar por nome (${products.length} produtos)`}
-            className="w-full max-w-xs rounded-md border bg-background px-3 py-1.5 text-sm"
-          />
+          <form action="/products" className="grid gap-2 md:grid-cols-4 xl:grid-cols-8">
+            <input
+              name="q"
+              defaultValue={initialFilters.q ?? ""}
+              placeholder={`Buscar (${products.length} produtos)`}
+              className="rounded-md border bg-background px-3 py-1.5 text-sm md:col-span-2"
+            />
+            <select
+              name="status"
+              defaultValue={initialFilters.status ?? "active"}
+              className="rounded-md border bg-background px-2 py-1.5 text-sm"
+            >
+              <option value="active">ativos</option>
+              <option value="inactive">inativos</option>
+              <option value="all">todos</option>
+            </select>
+            <select
+              name="categoryId"
+              defaultValue={initialFilters.categoryId ?? ""}
+              className="rounded-md border bg-background px-2 py-1.5 text-sm"
+            >
+              <option value="">categoria</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+            <FilterSelect
+              name="productType"
+              label="tipo"
+              value={initialFilters.productType}
+              options={filterOptions.productTypes}
+            />
+            <FilterSelect name="theme" label="tema" value={initialFilters.theme} options={filterOptions.themes} />
+            <FilterSelect name="color" label="cor" value={initialFilters.color} options={filterOptions.colors} />
+            <FilterSelect name="size" label="tamanho" value={initialFilters.size} options={filterOptions.sizes} />
+            <FilterSelect
+              name="finish"
+              label="acabamento"
+              value={initialFilters.finish}
+              options={filterOptions.finishes}
+            />
+            <div className="flex gap-2 xl:col-span-3">
+              <button
+                type="submit"
+                className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"
+              >
+                Filtrar
+              </button>
+              <a href="/products" className="rounded-md border px-3 py-1.5 text-sm text-muted-foreground">
+                Limpar
+              </a>
+            </div>
+          </form>
         </div>
       )}
 
@@ -211,6 +305,29 @@ export default function ProductsPanel({
                 className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
               />
             </label>
+            {editor.mode === "create" && (
+              <>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">SKU da primeira variante</span>
+                  <input
+                    value={firstVariantSku}
+                    onChange={(event) => setFirstVariantSku(event.target.value)}
+                    maxLength={60}
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">Nome da primeira variante</span>
+                  <input
+                    value={firstVariantName}
+                    onChange={(event) => setFirstVariantName(event.target.value)}
+                    maxLength={120}
+                    placeholder={name}
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+                  />
+                </label>
+              </>
+            )}
             <label className="block">
               <span className="text-xs text-muted-foreground">Tipo</span>
               <input
@@ -293,7 +410,7 @@ export default function ProductsPanel({
             <button
               type="button"
               onClick={submitProduct}
-              disabled={pending || !name.trim()}
+              disabled={pending || !name.trim() || (editor.mode === "create" && !firstVariantSku.trim())}
               className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
             >
               {editor.mode === "create" ? "Cadastrar" : "Salvar"}
@@ -327,7 +444,7 @@ export default function ProductsPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {visibleProducts.map((product) => (
+              {products.map((product) => (
                 <Fragment key={product.id}>
                   <tr className={cn(!product.active && "opacity-60")}>
                     <td className="max-w-60 px-4 py-2">
@@ -515,6 +632,52 @@ function VariantManager({ productId, materials }: { productId: number; materials
   );
 }
 
+function OverrideField({
+  label,
+  value,
+  inherited,
+  maxLength,
+  onChange,
+  multiline = false,
+}: {
+  label: string;
+  value: string;
+  inherited: string | null | undefined;
+  maxLength: number;
+  onChange: (value: string) => void;
+  multiline?: boolean;
+}) {
+  const source = value.trim() ? "sobrescrito" : "herdado";
+  const effective = value.trim() || inherited || "sem valor";
+  return (
+    <div className={cn("block", multiline && "sm:col-span-3")}>
+      <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        {label}
+        <span className="rounded border px-1.5 py-0.5 text-[0.68rem] uppercase tracking-normal">{source}</span>
+      </span>
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={inherited ?? ""}
+          maxLength={maxLength}
+          rows={2}
+          className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
+        />
+      ) : (
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={inherited ?? ""}
+          maxLength={maxLength}
+          className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
+        />
+      )}
+      <span className="mt-1 block text-[0.7rem] text-muted-foreground">Valor efetivo: {effective}</span>
+    </div>
+  );
+}
+
 function VariantEditorForm({
   productId,
   variantId,
@@ -618,36 +781,27 @@ function VariantEditorForm({
             className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
           />
         </label>
-        <label className="block">
-          <span className="text-xs text-muted-foreground">Cor override</span>
-          <input
-            value={colorOverride}
-            onChange={(e) => setColorOverride(e.target.value)}
-            placeholder={editing?.productColor ?? ""}
-            maxLength={60}
-            className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
-          />
-        </label>
-        <label className="block">
-          <span className="text-xs text-muted-foreground">Tamanho override</span>
-          <input
-            value={sizeOverride}
-            onChange={(e) => setSizeOverride(e.target.value)}
-            placeholder={editing?.productSize ?? ""}
-            maxLength={60}
-            className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
-          />
-        </label>
-        <label className="block">
-          <span className="text-xs text-muted-foreground">Acabamento override</span>
-          <input
-            value={finishOverride}
-            onChange={(e) => setFinishOverride(e.target.value)}
-            placeholder={editing?.productFinish ?? ""}
-            maxLength={60}
-            className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
-          />
-        </label>
+        <OverrideField
+          label="Cor"
+          value={colorOverride}
+          inherited={editing?.productColor}
+          maxLength={60}
+          onChange={setColorOverride}
+        />
+        <OverrideField
+          label="Tamanho"
+          value={sizeOverride}
+          inherited={editing?.productSize}
+          maxLength={60}
+          onChange={setSizeOverride}
+        />
+        <OverrideField
+          label="Acabamento"
+          value={finishOverride}
+          inherited={editing?.productFinish}
+          maxLength={60}
+          onChange={setFinishOverride}
+        />
         <label className="block">
           <span className="text-xs text-muted-foreground">Imagem da variante</span>
           <input
@@ -670,17 +824,14 @@ function VariantEditorForm({
             usar imagem do produto
           </label>
         )}
-        <label className="block sm:col-span-3">
-          <span className="text-xs text-muted-foreground">Notas override</span>
-          <textarea
-            value={notesOverride}
-            onChange={(e) => setNotesOverride(e.target.value)}
-            placeholder={editing?.productNotes ?? ""}
-            maxLength={2000}
-            rows={2}
-            className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
-          />
-        </label>
+        <OverrideField
+          label="Notas internas"
+          value={notesOverride}
+          inherited={editing?.productNotes}
+          maxLength={2000}
+          onChange={setNotesOverride}
+          multiline
+        />
         <label className="block">
           <span className="text-xs text-muted-foreground">Tempo de impressão (min)</span>
           <input
@@ -955,8 +1106,11 @@ function CodesEditor({ variantId }: { variantId: number }) {
       <ul className="mt-1 space-y-1">
         {codes.map((c) => (
           <li key={c.id} className="flex items-center justify-between text-xs">
-            <span>
-              {c.code} · {c.channel}
+            <span className="flex items-center gap-1.5">
+              <span>{c.code}</span>
+              <span className="rounded border px-1.5 py-0.5 text-[0.68rem] uppercase tracking-normal">
+                canal {c.channel}
+              </span>
             </span>
             <button
               type="button"

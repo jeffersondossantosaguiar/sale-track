@@ -323,6 +323,76 @@ export function createProduct(input: ProductPatch, opts?: { db?: Db }): ServiceR
   }
 }
 
+export function createProductWithFirstVariant(
+  productInput: ProductPatch,
+  variantInput: VariantPatch,
+  opts?: { db?: Db },
+): ServiceResult<{ id: number; variantId: number }> {
+  const db = dbOf(opts);
+  const parsedProduct = productInputSchema.safeParse(productInput);
+  if (!parsedProduct.success) return { ok: false, error: zodMessage(parsedProduct.error.issues) };
+  const parsedVariant = variantInputSchema.safeParse(variantInput);
+  if (!parsedVariant.success) return { ok: false, error: zodMessage(parsedVariant.error.issues) };
+  const productData = parsedProduct.data;
+  const variantData = parsedVariant.data;
+  const missing = assertCategoryExists(db, productData.categoryId);
+  if (missing) return { ok: false, error: missing };
+  try {
+    const created = db.transaction((tx) => {
+      const inserted = tx
+        .insert(products)
+        .values({
+          name: productData.name,
+          categoryId: productData.categoryId ?? null,
+          productType: productData.productType ?? null,
+          theme: productData.theme ?? null,
+          primaryColor: productData.primaryColor ?? null,
+          sizeLabel: productData.sizeLabel ?? null,
+          finish: productData.finish ?? null,
+          internalNotes: productData.internalNotes ?? null,
+          marginBps: productData.marginBps ?? 3500,
+          active: true,
+          createdAt: now(),
+          updatedAt: now(),
+        })
+        .run();
+      const productId = Number(inserted.lastInsertRowid);
+      const variantInserted = tx
+        .insert(variants)
+        .values({
+          productId,
+          sku: variantData.sku,
+          name: variantData.name,
+          colorOverride: variantData.colorOverride ?? null,
+          sizeOverride: variantData.sizeOverride ?? null,
+          finishOverride: variantData.finishOverride ?? null,
+          notesOverride: variantData.notesOverride ?? null,
+          printTimeMin: variantData.printTimeMin,
+          manualTimeMin: variantData.manualTimeMin,
+          filamentMaterialId: variantData.filamentMaterialId,
+          filamentGrams: variantData.filamentGrams,
+          packagingCents: variantData.packagingCents,
+          accessoriesCents: variantData.accessoriesCents,
+          costCents: 0,
+          active: true,
+          createdAt: now(),
+          updatedAt: now(),
+        })
+        .run();
+      const variantId = Number(variantInserted.lastInsertRowid);
+      recomputeVariantCost(tx, variantId);
+      ensureVariantPrices(tx, variantId);
+      return { id: productId, variantId };
+    });
+    return { ok: true, value: created };
+  } catch (error) {
+    if (error instanceof Error && /UNIQUE/.test(error.message)) {
+      return { ok: false, error: `SKU "${variantData.sku}" já existe` };
+    }
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 /** Garante as linhas de preço (Shopee/TikTok) de uma variante, criando-as se ausentes. */
 function ensureVariantPrices(db: Db, variantId: number): void {
   for (const channel of ["shopee", "tiktok"] as const) {
@@ -500,6 +570,9 @@ export type CatalogFilters = {
   status?: CatalogStatusFilter;
   productType?: string | null;
   theme?: string | null;
+  color?: string | null;
+  size?: string | null;
+  finish?: string | null;
 };
 
 export type CatalogListRow = ProductRow & {
@@ -564,9 +637,15 @@ export function listCatalog(filters: CatalogFilters = {}, opts?: { db?: Db }): C
       if (status === "inactive") return !variant.active || !product.active;
       return true;
     });
+    const variantsForAttributes = variantsForStatus.filter((variant) => {
+      if (filters.color && variant.effectiveColor !== filters.color) return false;
+      if (filters.size && variant.effectiveSize !== filters.size) return false;
+      if (filters.finish && variant.effectiveFinish !== filters.finish) return false;
+      return true;
+    });
     if (status === "inactive" && product.active && variantsForStatus.length === 0) continue;
     const matchedVariants = needle
-      ? variantsForStatus.filter((variant) =>
+      ? variantsForAttributes.filter((variant) =>
           [
             product.name,
             product.categoryName,
@@ -583,7 +662,7 @@ export function listCatalog(filters: CatalogFilters = {}, opts?: { db?: Db }): C
             .toLowerCase()
             .includes(needle),
         )
-      : variantsForStatus;
+      : variantsForAttributes;
     const productMatches = needle
       ? [product.name, product.categoryName, product.productType, product.theme]
           .filter(Boolean)
@@ -591,8 +670,9 @@ export function listCatalog(filters: CatalogFilters = {}, opts?: { db?: Db }): C
           .toLowerCase()
           .includes(needle)
       : true;
-    if (productMatches || matchedVariants.length > 0) {
-      result.push({ ...product, variants: matchedVariants.length > 0 ? matchedVariants : variantsForStatus });
+    const hasAttributeFilters = !!(filters.color || filters.size || filters.finish);
+    if ((productMatches && !hasAttributeFilters) || matchedVariants.length > 0) {
+      result.push({ ...product, variants: matchedVariants.length > 0 ? matchedVariants : variantsForAttributes });
     }
   }
   return result;

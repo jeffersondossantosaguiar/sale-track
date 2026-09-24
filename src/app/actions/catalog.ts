@@ -17,6 +17,7 @@ import {
   createPrinter as createPrinterService,
   createProductCode as createProductCodeService,
   createProduct as createProductService,
+  createProductWithFirstVariant,
   createVariant as createVariantService,
   deleteCategory as deleteCategoryService,
   deleteMaterial as deleteMaterialService,
@@ -139,7 +140,9 @@ export async function deleteCategory(formData: FormData): Promise<ActionResult<{
 
 export async function createProduct(formData: FormData): Promise<ActionResult<{ products: ProductRow[] }>> {
   const db = getDb().db;
-  const result = createProductService(productForm(formData), { db });
+  const result = formData.has("firstVariantSku")
+    ? createProductWithFirstVariant(productForm(formData), firstVariantForm(formData), { db })
+    : createProductService(productForm(formData), { db });
   if (!result.ok) return actionError(result.error);
   const image = await imageUpload(formData);
   if (image) {
@@ -148,6 +151,19 @@ export async function createProduct(formData: FormData): Promise<ActionResult<{ 
   }
   revalidatePath("/products");
   return actionData({ products: listProducts({ db }) });
+}
+
+function firstVariantForm(formData: FormData) {
+  return {
+    sku: String(formData.get("firstVariantSku") ?? ""),
+    name: String(formData.get("firstVariantName") || formData.get("name") || ""),
+    printTimeMin: 0,
+    manualTimeMin: 0,
+    filamentMaterialId: null,
+    filamentGrams: 0,
+    packagingCents: 0,
+    accessoriesCents: 0,
+  };
 }
 
 export async function updateProduct(formData: FormData): Promise<ActionResult<{ products: ProductRow[] }>> {
