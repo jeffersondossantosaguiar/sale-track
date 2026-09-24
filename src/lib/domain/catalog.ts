@@ -17,6 +17,20 @@ export function normalizeName(raw: string): string {
   return raw.trim().replace(/\s+/g, " ");
 }
 
+export function normalizeNullableText(raw: unknown): string | null {
+  if (raw == null) return null;
+  const normalized = normalizeName(String(raw));
+  return normalized.length > 0 ? normalized : null;
+}
+
+export function normalizeSku(raw: string): string {
+  return normalizeName(raw).toUpperCase();
+}
+
+export function normalizeCode(raw: string): string {
+  return normalizeName(raw).toUpperCase();
+}
+
 export function normalizeCategoryName(raw: string): string {
   const normalized = normalizeName(raw);
   return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : normalized;
@@ -47,6 +61,24 @@ export const productInputSchema = z.object({
       z.null().or(z.coerce.number().int().positive("categoria inválida")),
     )
     .optional(),
+  productType: z
+    .preprocess((v) => normalizeNullableText(v), z.string().max(60, "tipo muito longo (máx. 60)").nullable())
+    .optional(),
+  theme: z
+    .preprocess((v) => normalizeNullableText(v), z.string().max(80, "tema muito longo (máx. 80)").nullable())
+    .optional(),
+  primaryColor: z
+    .preprocess((v) => normalizeNullableText(v), z.string().max(60, "cor muito longa (máx. 60)").nullable())
+    .optional(),
+  sizeLabel: z
+    .preprocess((v) => normalizeNullableText(v), z.string().max(60, "tamanho muito longo (máx. 60)").nullable())
+    .optional(),
+  finish: z
+    .preprocess((v) => normalizeNullableText(v), z.string().max(60, "acabamento muito longo (máx. 60)").nullable())
+    .optional(),
+  internalNotes: z
+    .preprocess((v) => normalizeNullableText(v), z.string().max(2000, "notas muito longas (máx. 2000)").nullable())
+    .optional(),
   marginBps: z.coerce
     .number()
     .int("margem deve ser inteiro")
@@ -64,7 +96,7 @@ export type ProductPatch = Partial<ProductInput>;
 export const variantInputSchema = z.object({
   sku: z
     .string()
-    .transform(normalizeName)
+    .transform(normalizeSku)
     .refine((v) => v.length >= 1, "SKU é obrigatório")
     .refine((v) => v.length <= 60, "SKU muito longo (máx. 60)"),
   name: z
@@ -72,6 +104,18 @@ export const variantInputSchema = z.object({
     .transform(normalizeName)
     .refine((v) => v.length >= 1, "nome da variante é obrigatório")
     .refine((v) => v.length <= 120, "nome muito longo (máx. 120)"),
+  colorOverride: z
+    .preprocess((v) => normalizeNullableText(v), z.string().max(60, "cor muito longa (máx. 60)").nullable())
+    .optional(),
+  sizeOverride: z
+    .preprocess((v) => normalizeNullableText(v), z.string().max(60, "tamanho muito longo (máx. 60)").nullable())
+    .optional(),
+  finishOverride: z
+    .preprocess((v) => normalizeNullableText(v), z.string().max(60, "acabamento muito longo (máx. 60)").nullable())
+    .optional(),
+  notesOverride: z
+    .preprocess((v) => normalizeNullableText(v), z.string().max(2000, "notas muito longas (máx. 2000)").nullable())
+    .optional(),
   printTimeMin: z.coerce.number().int("tempo de impressão deve ser inteiro (min)").min(0, "tempo >= 0"),
   manualTimeMin: z.coerce.number().int("tempo manual deve ser inteiro (min)").min(0, "tempo >= 0"),
   filamentMaterialId: z.preprocess(
@@ -153,13 +197,46 @@ export const productCodeChannelSchema = z.enum(["shopee", "tiktok", "geral"]);
  * Input de código de produto (T029). `channel = "geral"` → NULL no banco
  * (vale para qualquer canal); código normalizado para dedup previsível.
  */
-export const productCodeInputSchema = z.object({
-  code: z
-    .string()
-    .transform(normalizeName)
-    .refine((v) => v.length >= 1, "código obrigatório")
-    .refine((v) => v.length <= 255, "código muito longo (máx. 255)"),
-  channel: productCodeChannelSchema.default("geral"),
-});
+export const productCodeInputSchema = z
+  .object({
+    code: z
+      .string()
+      .transform(normalizeName)
+      .refine((v) => v.length >= 1, "código obrigatório")
+      .refine((v) => v.length <= 255, "código muito longo (máx. 255)"),
+    channel: productCodeChannelSchema.default("geral"),
+  })
+  .superRefine((value, ctx) => {
+    if (value.channel === "tiktok" && normalizeCode(value.code) === "PADRAO") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "TikTok deve usar a descrição do item, não o código genérico Padrao",
+      });
+    }
+  });
 
 export type ProductCodeInput = z.infer<typeof productCodeInputSchema>;
+
+export const catalogImageMimeSchema = z.enum(["image/jpeg", "image/png", "image/webp"]);
+export type CatalogImageMime = z.infer<typeof catalogImageMimeSchema>;
+
+export const catalogImageMetadataSchema = z.object({
+  key: z
+    .string()
+    .min(12)
+    .max(160)
+    .regex(/^[a-zA-Z0-9._-]+$/, "chave de imagem inválida"),
+  mime: catalogImageMimeSchema,
+  originalName: z
+    .string()
+    .transform(normalizeName)
+    .refine((v) => v.length >= 1, "nome original obrigatório")
+    .refine((v) => v.length <= 255, "nome original muito longo"),
+  bytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(5 * 1024 * 1024),
+});
+
+export type CatalogImageMetadata = z.infer<typeof catalogImageMetadataSchema>;

@@ -181,7 +181,7 @@ describe("unlinked queue (T031)", () => {
     }
   });
 
-  it("presencial aprende como código geral (canal null) e vincula por canal presencial", () => {
+  it("presencial aprende como código geral e vincula por canal presencial", () => {
     const { db, cleanup } = setupTestDb();
     try {
       const variantId = makeVariant(db, "No balcão");
@@ -193,7 +193,7 @@ describe("unlinked queue (T031)", () => {
       expect(res.value.learned).toBe(true);
 
       const codes = listProductCodes(variantId, { db });
-      expect(codes[0]?.channel).toBeNull();
+      expect(codes[0]?.channel).toBe("geral");
       expect(rowsOf(db, "BALCAO")[0]?.variantId).toBe(variantId);
     } finally {
       cleanup();

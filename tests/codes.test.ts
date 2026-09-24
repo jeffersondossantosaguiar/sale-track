@@ -13,7 +13,7 @@ import { setupTestDb } from "./helpers/db";
 
 /**
  * T029 [US2] — gestão de product_codes (multi-código por canal) na granularidade
- * de VARIANTE. Canal "geral" = null (vale para qualquer canal); vínculo alimenta o import.
+ * de VARIANTE. Canal "geral" vale para qualquer canal; vínculo alimenta o import.
  */
 
 function defaultVariantId(db: Db, productId: number): number {
@@ -44,7 +44,7 @@ describe("catalog codes", () => {
       const codes = listProductCodes(variantId, { db });
       expect(codes).toHaveLength(2);
       const channels = codes.map((c) => c.channel).sort();
-      expect(channels).toEqual([null, "shopee"]);
+      expect(channels).toEqual(["geral", "shopee"]);
     } finally {
       cleanup();
     }
@@ -128,7 +128,7 @@ describe("catalog codes", () => {
       const variantId = defaultVariantId(db, makeProduct(db));
       createProductCode(variantId, { code: "P001", channel: "shopee" }, { db });
 
-      const codes = listProductCodes(variantId, { db }) as (ProductCodeRow & { channel: string | null })[];
+      const codes = listProductCodes(variantId, { db }) as ProductCodeRow[];
       const lookup = codes.map((c) => ({
         code: c.code,
         channel: c.channel,

@@ -4,14 +4,14 @@ import type { Channel } from "./channel";
  * Vínculo de item → variante via product_codes (US5, 006).
  * Contrato: a CHAVE de vínculo depende do canal — TikTok casa pela DESCRIÇÃO
  * (o cProd é genérico 'Padrao'); Shopee/presencial/geral casam por cProd.
- * Prefere código específico do canal; fallback para "geral" (channel null).
+ * Prefere código específico do canal; fallback para "geral".
  * Sem match → item sem vínculo (não bloqueia lote).
  * Presencial não tem códigos de marketplace → só casa códigos "geral".
  */
 
 export type CodeLookupRow = {
   code: string;
-  channel: string | null;
+  channel: string;
   variant: {
     id: number;
     costCents: number;
@@ -24,9 +24,9 @@ export type LinkedItem = {
   frozenCostCents: number | null; // null = sem custo conhecido
 };
 
-function rank(channel: string | null): number {
+function rank(channel: string): number {
   // canal específico (0) > geral (1) > nada (não casa)
-  return channel === null ? 1 : 0;
+  return channel === "geral" ? 1 : 0;
 }
 
 /** Forma normalizada para casamento case-insensitive e tolerante a espaços. */
@@ -44,7 +44,8 @@ export function linkCProd(key: string, channel: Channel, codes: CodeLookupRow[])
   const candidates = codes
     .filter((row) => normalizeMatch(row.code) === normalizeMatch(key))
     .filter(
-      (row) => row.channel === null || row.channel === channel || (channel === "presencial" && row.channel === null),
+      (row) =>
+        row.channel === "geral" || row.channel === channel || (channel === "presencial" && row.channel === "geral"),
     )
     .sort((a, b) => rank(a.channel) - rank(b.channel));
 

@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { type Db, createDb } from "../../src/lib/db/client";
@@ -9,6 +10,7 @@ import { type Db, createDb } from "../../src/lib/db/client";
  */
 
 export const FIXTURES_DIR = join(process.cwd(), "tests", "fixtures", "xml");
+export const IMAGE_FIXTURES_DIR = join(process.cwd(), "tests", "fixtures", "images");
 
 export function readFixture(name: string): string {
   return readFileSync(join(FIXTURES_DIR, name), "utf8");
@@ -20,6 +22,20 @@ export function setupTestDb(): { db: Db; cleanup: () => void } {
   return {
     db: created.db,
     cleanup: () => created.sqlite.close(),
+  };
+}
+
+export function setupTestDbWithMedia(): { db: Db; mediaRoot: string; cleanup: () => void } {
+  const created = createDb({ url: ":memory:" });
+  const mediaRoot = mkdtempSync(join(tmpdir(), "sale-track-catalog-media-"));
+  migrate(created.db, { migrationsFolder: join(process.cwd(), "src/lib/db/migrations") });
+  return {
+    db: created.db,
+    mediaRoot,
+    cleanup: () => {
+      created.sqlite.close();
+      rmSync(mediaRoot, { recursive: true, force: true });
+    },
   };
 }
 

@@ -23,8 +23,9 @@ Este arquivo descreve somente o estado atual implementado do domínio. Visão fu
 
 ## Entidades
 
-- **Product** — contêiner de **variantes**; nome, categoria. Não carrega mais preço/custo.
-- **Variant** — unidade real de venda com **SKU único**, insumos de fabricação (tempo de impressão, tempo manual, peso = filamento, material, embalagem, acessórios), **custo calculado** e preços por canal. Produto simples = 1 variante default.
+- **Product** — catálogo mestre do ERP e fonte de verdade da identidade compartilhada: nome, categoria, tipo, tema/personagem, cor principal, tamanho/escala, acabamento, notas internas, margem e imagem principal. Não carrega preço/custo.
+- **Variant** — unidade real de venda com **SKU único normalizado em maiúsculas**, nome comercial, overrides opcionais de cor/tamanho/acabamento/notas/imagem, insumos de fabricação (tempo de impressão, tempo manual, peso = filamento, material, embalagem, acessórios), **custo calculado** e preços por canal. Produto simples = 1 variante default.
+- **Imagem do catálogo** — arquivo local salvo em `data/catalog-media/`, fora do Git. O banco guarda somente chave opaca, MIME, nome original e tamanho; produto/variante nunca guarda caminho absoluto nem blob binário. Variante sem imagem própria usa fallback da imagem do produto. JPEG/PNG/WebP até 5 MiB, com validação de MIME e assinatura.
 - **Material** — filamento com preço por kg (cor/tipo).
 - **VariantPrice** — margem, preço sugerido e praticado por variante × canal (Shopee/TikTok).
 - **Printer** — referência de custo (aquisição, vida útil, consumo W, manutenção) para derivar o R$/hora global (usa-se a **mais cara**).
@@ -51,19 +52,19 @@ Este arquivo descreve somente o estado atual implementado do domínio. Visão fu
 ## Importação de XML
 - Upload **em lote** de vários XMLs de uma vez.
 - **Canal identificado pela série da NFe** (configurável em Configurações → Canais; ex.: Shopee = séries 1 e 2, TikTok = série 3). Série não mapeada cai para o padrão do nome de arquivo (Shopee: `..._invoice_file_...`; TikTok: número puro); desconhecido pergunta manual — sugestão **editável por lote** antes de confirmar.
-- Itens casam com o catálogo por chave de canal, na granularidade de **variante**: Shopee/presencial usam `cProd`; TikTok usa a **descrição do item** porque o `cProd` vem genérico (`Padrao`). Sem vínculo cai na fila "códigos sem vínculo" para ligar à variante **uma vez** (daí aprende). Ao aplicar custo, congela o custo da venda.
+- Itens casam com o catálogo por chave de canal, na granularidade de **variante**: Shopee/presencial usam `cProd`; TikTok usa a **descrição do item** porque o `cProd` vem genérico (`Padrao`). `product_codes.channel` é sempre explícito (`geral`, `shopee`, `tiktok`) e a unicidade usa `(channel, normalizedCode)`. TikTok rejeita o código genérico `Padrao`; deve aprender pela descrição. Sem vínculo cai na fila "códigos sem vínculo" para ligar à variante **uma vez** (daí aprende). Ao aplicar custo, congela o custo da venda.
 - Faturamento do mês = NF importadas + presencial − estornos.
 
 ## Telas / relatórios
 - **Dashboard:** faturamento do mês + barra de % do teto MEI no ano (leitura); caixa (entradas, saídas, saldo); gastos por categoria; vendas por canal (bruto / taxas derivadas / recebido); vendas recentes.
 - **Navegação:** menu lateral (sidebar) fixo em desktop e drawer/hambúrguer em telas pequenas, com item expansível **Configurações**.
-- **Produtos** (catálogo manual + variantes + códigos por canal), **Vendas** (importadas + manuais + recebido/lucro + estornar + importar relatórios), **Caixa**, **Códigos sem vínculo**, **Importar XML**, **Extrato mensal exportável** (base para DASN).
+- **Produtos** (catálogo mestre + variantes + herança/overrides + imagem local + códigos por canal), **Vendas** (importadas + manuais + recebido/lucro + estornar + importar relatórios), **Caixa**, **Códigos sem vínculo**, **Importar XML**, **Extrato mensal exportável** (base para DASN).
 - **Configurações** (`/settings`, menu lateral): **Precificação** (`/settings/pricing` — parâmetros globais de energia/horas/mão de obra + materiais), **Impressoras** (`/settings/printers`), **Canais** (`/settings/channels` — séries de emissão da NFe que identificam o canal + faixas de taxa) e **Teto MEI** (`/settings/mei` — edição; Dashboard mostra apenas o progresso).
 
 ## Stack / operação
 - **Next.js fullstack** (App Router + Server Actions) + **SQLite** (Drizzle + better-sqlite3) + **Tailwind + ShadCN + Biome**, **Node LTS**.
 - App **local**, single-user, sem login; abre no navegador (acessível do celular na mesma rede Wi-Fi).
-- Os dados ficam em um arquivo SQLite local, que pode ser copiado manualmente com o app fechado. Há exportação do extrato mensal em CSV, mas ainda não existe um fluxo guiado de backup e restauração do banco.
+- Os dados ficam em `data/sale-track.db` e as imagens do catálogo em `data/catalog-media/`; backup/restauração precisa copiar os dois juntos com o app fechado. Há exportação do extrato mensal em CSV, mas ainda não existe um fluxo guiado de backup e restauração do banco+mídia.
 
 ## Fora de escopo (fase atual)
 - Integração com APIs de Shopee/TikTok (fase futura, o stack permite).

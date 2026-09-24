@@ -1,4 +1,5 @@
 import { productCodes, products, saleItems, sales, variants } from "@/lib/db/schema";
+import { normalizeCode } from "@/lib/domain/catalog";
 import { setReceived } from "@/lib/sales/service";
 import { importNfeToDb } from "@/lib/xml/importer";
 import { parseXmlInvoice } from "@/lib/xml/parser";
@@ -32,8 +33,8 @@ function seedCatalog(db: ReturnType<typeof setupTestDb>["db"]) {
   );
   db.insert(productCodes)
     .values([
-      { variantId, code: "169415788741", channel: "shopee" },
-      { variantId, code: "TOTEM-CASAL", channel: null }, // código geral
+      { variantId, code: "169415788741", normalizedCode: normalizeCode("169415788741"), channel: "shopee" },
+      { variantId, code: "TOTEM-CASAL", normalizedCode: normalizeCode("TOTEM-CASAL"), channel: "geral" },
     ])
     .run();
   return variantId;

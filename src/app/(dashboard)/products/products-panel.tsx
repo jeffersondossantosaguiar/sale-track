@@ -49,6 +49,14 @@ export default function ProductsPanel({
   const [filter, setFilter] = useState("");
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [productType, setProductType] = useState("");
+  const [theme, setTheme] = useState("");
+  const [primaryColor, setPrimaryColor] = useState("");
+  const [sizeLabel, setSizeLabel] = useState("");
+  const [finish, setFinish] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
+  const [imageIntent, setImageIntent] = useState<"keep" | "remove">("keep");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [margin, setMargin] = useState("35");
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -72,6 +80,14 @@ export default function ProductsPanel({
     setEditor({ mode: "create" });
     setName("");
     setCategoryId("");
+    setProductType("");
+    setTheme("");
+    setPrimaryColor("");
+    setSizeLabel("");
+    setFinish("");
+    setInternalNotes("");
+    setImageIntent("keep");
+    setImageFile(null);
     setMargin("35");
   };
 
@@ -79,6 +95,14 @@ export default function ProductsPanel({
     setEditor({ mode: "edit", product });
     setName(product.name);
     setCategoryId(product.categoryId ? String(product.categoryId) : "");
+    setProductType(product.productType ?? "");
+    setTheme(product.theme ?? "");
+    setPrimaryColor(product.primaryColor ?? "");
+    setSizeLabel(product.sizeLabel ?? "");
+    setFinish(product.finish ?? "");
+    setInternalNotes(product.internalNotes ?? "");
+    setImageIntent("keep");
+    setImageFile(null);
     setMargin(String((product.marginBps ?? 3500) / 100));
   };
 
@@ -92,6 +116,14 @@ export default function ProductsPanel({
     const form = new FormData();
     form.set("name", name);
     form.set("categoryId", categoryId);
+    form.set("productType", productType);
+    form.set("theme", theme);
+    form.set("primaryColor", primaryColor);
+    form.set("sizeLabel", sizeLabel);
+    form.set("finish", finish);
+    form.set("internalNotes", internalNotes);
+    form.set("imageIntent", imageIntent);
+    if (imageFile) form.set("image", imageFile);
     form.set("marginBps", margin);
     if (editor?.mode === "edit") form.set("id", String(editor.product.id));
     startTransition(async () =>
@@ -179,6 +211,83 @@ export default function ProductsPanel({
                 className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
               />
             </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">Tipo</span>
+              <input
+                value={productType}
+                onChange={(event) => setProductType(event.target.value)}
+                maxLength={60}
+                className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">Tema / personagem</span>
+              <input
+                value={theme}
+                onChange={(event) => setTheme(event.target.value)}
+                maxLength={80}
+                className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">Cor principal</span>
+              <input
+                value={primaryColor}
+                onChange={(event) => setPrimaryColor(event.target.value)}
+                maxLength={60}
+                className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">Tamanho / escala</span>
+              <input
+                value={sizeLabel}
+                onChange={(event) => setSizeLabel(event.target.value)}
+                maxLength={60}
+                className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">Acabamento</span>
+              <input
+                value={finish}
+                onChange={(event) => setFinish(event.target.value)}
+                maxLength={60}
+                className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="text-xs text-muted-foreground">Notas internas</span>
+              <textarea
+                value={internalNotes}
+                onChange={(event) => setInternalNotes(event.target.value)}
+                maxLength={2000}
+                rows={3}
+                className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">Imagem principal</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) => {
+                  setImageFile(event.target.files?.[0] ?? null);
+                  setImageIntent("keep");
+                }}
+                className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+              />
+            </label>
+            {editor.mode === "edit" && (
+              <label className="flex items-center gap-2 self-end text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={imageIntent === "remove"}
+                  onChange={(event) => setImageIntent(event.target.checked ? "remove" : "keep")}
+                />
+                remover imagem atual
+              </label>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -424,6 +533,12 @@ function VariantEditorForm({
   const editing = variants.find((v) => v.id === variantId);
   const [sku, setSku] = useState(editing?.sku ?? "");
   const [name, setName] = useState(editing?.name ?? "");
+  const [colorOverride, setColorOverride] = useState(editing?.colorOverride ?? "");
+  const [sizeOverride, setSizeOverride] = useState(editing?.sizeOverride ?? "");
+  const [finishOverride, setFinishOverride] = useState(editing?.finishOverride ?? "");
+  const [notesOverride, setNotesOverride] = useState(editing?.notesOverride ?? "");
+  const [imageIntent, setImageIntent] = useState<"keep" | "remove">("keep");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [printTimeMin, setPrintTimeMin] = useState(String(editing?.printTimeMin ?? "0"));
   const [manualTimeMin, setManualTimeMin] = useState(String(editing?.manualTimeMin ?? "0"));
   const [materialId, setMaterialId] = useState(String(editing?.filamentMaterialId ?? ""));
@@ -461,6 +576,12 @@ function VariantEditorForm({
     if (editing) form.set("id", String(editing.id));
     form.set("sku", sku);
     form.set("name", name);
+    form.set("colorOverride", colorOverride);
+    form.set("sizeOverride", sizeOverride);
+    form.set("finishOverride", finishOverride);
+    form.set("notesOverride", notesOverride);
+    form.set("imageIntent", imageIntent);
+    if (imageFile) form.set("image", imageFile);
     form.set("printTimeMin", printTimeMin);
     form.set("manualTimeMin", manualTimeMin);
     form.set("filamentMaterialId", materialId);
@@ -494,6 +615,69 @@ function VariantEditorForm({
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={120}
+            className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-muted-foreground">Cor override</span>
+          <input
+            value={colorOverride}
+            onChange={(e) => setColorOverride(e.target.value)}
+            placeholder={editing?.productColor ?? ""}
+            maxLength={60}
+            className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-muted-foreground">Tamanho override</span>
+          <input
+            value={sizeOverride}
+            onChange={(e) => setSizeOverride(e.target.value)}
+            placeholder={editing?.productSize ?? ""}
+            maxLength={60}
+            className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-muted-foreground">Acabamento override</span>
+          <input
+            value={finishOverride}
+            onChange={(e) => setFinishOverride(e.target.value)}
+            placeholder={editing?.productFinish ?? ""}
+            maxLength={60}
+            className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-muted-foreground">Imagem da variante</span>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => {
+              setImageFile(e.target.files?.[0] ?? null);
+              setImageIntent("keep");
+            }}
+            className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
+          />
+        </label>
+        {editing && (
+          <label className="flex items-center gap-2 self-end text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={imageIntent === "remove"}
+              onChange={(e) => setImageIntent(e.target.checked ? "remove" : "keep")}
+            />
+            usar imagem do produto
+          </label>
+        )}
+        <label className="block sm:col-span-3">
+          <span className="text-xs text-muted-foreground">Notas override</span>
+          <textarea
+            value={notesOverride}
+            onChange={(e) => setNotesOverride(e.target.value)}
+            placeholder={editing?.productNotes ?? ""}
+            maxLength={2000}
+            rows={2}
             className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-sm"
           />
         </label>
@@ -746,7 +930,7 @@ function ChannelPriceEditor({
 }
 
 function CodesEditor({ variantId }: { variantId: number }) {
-  const [codes, setCodes] = useState<Array<{ id: number; code: string; channel: string | null }>>([]);
+  const [codes, setCodes] = useState<Array<{ id: number; code: string; channel: string }>>([]);
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
 
@@ -772,7 +956,7 @@ function CodesEditor({ variantId }: { variantId: number }) {
         {codes.map((c) => (
           <li key={c.id} className="flex items-center justify-between text-xs">
             <span>
-              {c.code} · {c.channel ?? "geral"}
+              {c.code} · {c.channel}
             </span>
             <button
               type="button"

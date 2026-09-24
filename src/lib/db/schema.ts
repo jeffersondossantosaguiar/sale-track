@@ -41,6 +41,16 @@ export const products = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     name: text("name").notNull(),
     categoryId: integer("category_id").references(() => categories.id, { onDelete: "set null" }),
+    productType: text("product_type"),
+    theme: text("theme"),
+    primaryColor: text("primary_color"),
+    sizeLabel: text("size_label"),
+    finish: text("finish"),
+    internalNotes: text("internal_notes"),
+    imageKey: text("image_key"),
+    imageMime: text("image_mime"),
+    imageOriginalName: text("image_original_name"),
+    imageBytes: integer("image_bytes"),
     marginBps: integer("margin_bps").notNull().default(3500), // margem unificada (005) — % do preço bruto
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdAt: integer("created_at", { mode: "timestamp" })
@@ -69,6 +79,14 @@ export const variants = sqliteTable(
       .references(() => products.id, { onDelete: "cascade" }),
     sku: text("sku").notNull(),
     name: text("name").notNull(),
+    colorOverride: text("color_override"),
+    sizeOverride: text("size_override"),
+    finishOverride: text("finish_override"),
+    notesOverride: text("notes_override"),
+    imageKey: text("image_key"),
+    imageMime: text("image_mime"),
+    imageOriginalName: text("image_original_name"),
+    imageBytes: integer("image_bytes"),
     printTimeMin: integer("print_time_min").notNull().default(0),
     manualTimeMin: integer("manual_time_min").notNull().default(0),
     filamentMaterialId: integer("filament_material_id").references(() => materials.id, { onDelete: "set null" }),
@@ -191,7 +209,7 @@ export const printers = sqliteTable(
 /* ============================ ProductCode ============================ */
 /**
  * Multi-código por canal (D3): cProd do XML X variante.
- * `channel` = "shopee" | "tiktok" | "geral" | null (vale p/ qualquer canal).
+ * `channel` = "shopee" | "tiktok" | "geral".
  * Sempre que o usuário vincula uma venda, o sistema aprende o código →
  * cria/atualiza esta tabela (auto-vinculação em imports futuros).
  */
@@ -204,13 +222,14 @@ export const productCodes = sqliteTable(
       .notNull()
       .references(() => variants.id, { onDelete: "cascade" }),
     code: text("code").notNull(),
-    channel: text("channel"), // null = geral
+    channel: text("channel").notNull().default("geral"),
+    normalizedCode: text("normalized_code").notNull(),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .$defaultFn(() => new Date()),
   },
   (t) => [
-    uniqueIndex("product_codes_code_channel_idx").on(t.code, t.channel),
+    uniqueIndex("product_codes_channel_normalized_idx").on(t.channel, t.normalizedCode),
     index("product_codes_variant_idx").on(t.variantId),
   ],
 );

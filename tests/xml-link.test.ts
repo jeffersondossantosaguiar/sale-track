@@ -2,7 +2,7 @@ import { itemMatchKey, linkItems } from "@/lib/xml/link";
 import { describe, expect, it } from "vitest";
 
 describe("T017 — vínculo por chave de canal via product_codes", () => {
-  const code = (code: string, channel: string | null, variantId: number, costCents = 0) => ({
+  const code = (code: string, channel: string, variantId: number, costCents = 0) => ({
     code,
     channel,
     variant: { id: variantId, costCents },
@@ -20,13 +20,13 @@ describe("T017 — vínculo por chave de canal via product_codes", () => {
   });
 
   it("fallback para código geral quando não há código do canal", () => {
-    const linked = linkItems([{ cProd: "SKU" }], "tiktok", [code("SKU", null, 2, 50)]);
+    const linked = linkItems([{ cProd: "SKU" }], "tiktok", [code("SKU", "geral", 2, 50)]);
     expect(linked[0].variantId).toBe(2);
     expect(linked[0].frozenCostCents).toBe(50);
   });
 
   it("prefere código do canal sobre o geral", () => {
-    const linked = linkItems([{ cProd: "SKU" }], "shopee", [code("SKU", null, 1, 10), code("SKU", "shopee", 2, 20)]);
+    const linked = linkItems([{ cProd: "SKU" }], "shopee", [code("SKU", "geral", 1, 10), code("SKU", "shopee", 2, 20)]);
     expect(linked[0].variantId).toBe(2);
   });
 
@@ -36,7 +36,7 @@ describe("T017 — vínculo por chave de canal via product_codes", () => {
   });
 
   it("presencial só casa códigos gerais", () => {
-    const linked = linkItems([{ cProd: "SKU" }], "presencial", [code("SKU", "shopee", 9), code("SKU", null, 3, 0)]);
+    const linked = linkItems([{ cProd: "SKU" }], "presencial", [code("SKU", "shopee", 9), code("SKU", "geral", 3, 0)]);
     expect(linked[0].variantId).toBe(3);
     expect(linked[0].frozenCostCents).toBe(0); // custo zero é custo válido
   });

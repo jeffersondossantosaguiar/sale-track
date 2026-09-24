@@ -1,3 +1,4 @@
+import { CatalogMediaStore } from "@/lib/catalog/media-store";
 import { type Db, getDb } from "@/lib/db/client";
 import {
   categories,
@@ -12,6 +13,7 @@ import {
   variants,
 } from "@/lib/db/schema";
 import {
+  type CatalogImageMetadata,
   type MaterialInput,
   type PrinterInput,
   type ProductCodeInput,
@@ -20,7 +22,9 @@ import {
   categoryNameSchema,
   materialInputSchema,
   normalizeCategoryName,
+  normalizeCode,
   normalizeName,
+  normalizeSku,
   printerInputSchema,
   productCodeChannelLabel,
   productCodeInputSchema,
@@ -55,6 +59,16 @@ export type ProductRow = {
   name: string;
   categoryId: number | null;
   categoryName: string | null;
+  productType: string | null;
+  theme: string | null;
+  primaryColor: string | null;
+  sizeLabel: string | null;
+  finish: string | null;
+  internalNotes: string | null;
+  imageKey: string | null;
+  imageMime: string | null;
+  imageOriginalName: string | null;
+  imageBytes: number | null;
   marginBps: number;
   active: boolean;
   variantCount: number;
@@ -66,6 +80,33 @@ export type VariantRow = {
   productId: number;
   sku: string;
   name: string;
+  colorOverride: string | null;
+  sizeOverride: string | null;
+  finishOverride: string | null;
+  notesOverride: string | null;
+  imageKey: string | null;
+  imageMime: string | null;
+  imageOriginalName: string | null;
+  imageBytes: number | null;
+  productName: string;
+  productType: string | null;
+  theme: string | null;
+  productColor: string | null;
+  productSize: string | null;
+  productFinish: string | null;
+  productNotes: string | null;
+  productImageKey: string | null;
+  productImageMime: string | null;
+  productImageOriginalName: string | null;
+  productImageBytes: number | null;
+  effectiveColor: string | null;
+  effectiveSize: string | null;
+  effectiveFinish: string | null;
+  effectiveNotes: string | null;
+  effectiveImageKey: string | null;
+  effectiveImageMime: string | null;
+  effectiveImageOriginalName: string | null;
+  effectiveImageBytes: number | null;
   printTimeMin: number;
   manualTimeMin: number;
   filamentMaterialId: number | null;
@@ -101,6 +142,10 @@ const now = () => new Date();
 
 function dbOf(opts?: { db?: Db }): Db {
   return opts?.db ?? getDb().db;
+}
+
+function mediaStoreOf(opts?: { mediaStore?: CatalogMediaStore }): CatalogMediaStore {
+  return opts?.mediaStore ?? new CatalogMediaStore();
 }
 
 function zodMessage(issues: { message: string }[]): string {
@@ -184,6 +229,16 @@ export function listProducts(opts?: { db?: Db }): ProductRow[] {
       name: products.name,
       categoryId: products.categoryId,
       categoryName: categories.name,
+      productType: products.productType,
+      theme: products.theme,
+      primaryColor: products.primaryColor,
+      sizeLabel: products.sizeLabel,
+      finish: products.finish,
+      internalNotes: products.internalNotes,
+      imageKey: products.imageKey,
+      imageMime: products.imageMime,
+      imageOriginalName: products.imageOriginalName,
+      imageBytes: products.imageBytes,
       marginBps: products.marginBps,
       active: products.active,
       variantCount: sql<number>`count(distinct ${variants.id})`,
@@ -222,6 +277,12 @@ export function createProduct(input: ProductPatch, opts?: { db?: Db }): ServiceR
         .values({
           name: data.name,
           categoryId: data.categoryId ?? null,
+          productType: data.productType ?? null,
+          theme: data.theme ?? null,
+          primaryColor: data.primaryColor ?? null,
+          sizeLabel: data.sizeLabel ?? null,
+          finish: data.finish ?? null,
+          internalNotes: data.internalNotes ?? null,
           marginBps: data.marginBps ?? 3500,
           active: true,
           createdAt: now(),
@@ -296,7 +357,7 @@ function ensureVariantPrices(db: Db, variantId: number): void {
 
 /** SKU default derivado do nome (maiúsculas, sem espaços/acentos), único o bastante. */
 function suggestSku(name: string): string {
-  const base = normalizeName(name)
+  const base = normalizeSku(name)
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
     .replace(/[^a-zA-Z0-9]+/g, "-")
@@ -319,6 +380,12 @@ export function updateProduct(id: number, patch: ProductPatch, opts?: { db?: Db 
     .set({
       ...(data.name !== undefined ? { name: data.name } : {}),
       ...(data.categoryId !== undefined ? { categoryId: data.categoryId ?? null } : {}),
+      ...(data.productType !== undefined ? { productType: data.productType } : {}),
+      ...(data.theme !== undefined ? { theme: data.theme } : {}),
+      ...(data.primaryColor !== undefined ? { primaryColor: data.primaryColor } : {}),
+      ...(data.sizeLabel !== undefined ? { sizeLabel: data.sizeLabel } : {}),
+      ...(data.finish !== undefined ? { finish: data.finish } : {}),
+      ...(data.internalNotes !== undefined ? { internalNotes: data.internalNotes } : {}),
       ...(data.marginBps !== undefined ? { marginBps: data.marginBps } : {}),
       updatedAt: now(),
     })
@@ -364,6 +431,35 @@ export function listVariants(productId: number, opts?: { db?: Db }): VariantRow[
       productId: variants.productId,
       sku: variants.sku,
       name: variants.name,
+      colorOverride: variants.colorOverride,
+      sizeOverride: variants.sizeOverride,
+      finishOverride: variants.finishOverride,
+      notesOverride: variants.notesOverride,
+      imageKey: variants.imageKey,
+      imageMime: variants.imageMime,
+      imageOriginalName: variants.imageOriginalName,
+      imageBytes: variants.imageBytes,
+      productName: products.name,
+      productType: products.productType,
+      theme: products.theme,
+      productColor: products.primaryColor,
+      productSize: products.sizeLabel,
+      productFinish: products.finish,
+      productNotes: products.internalNotes,
+      productImageKey: products.imageKey,
+      productImageMime: products.imageMime,
+      productImageOriginalName: products.imageOriginalName,
+      productImageBytes: products.imageBytes,
+      effectiveColor: sql<string | null>`coalesce(${variants.colorOverride}, ${products.primaryColor})`,
+      effectiveSize: sql<string | null>`coalesce(${variants.sizeOverride}, ${products.sizeLabel})`,
+      effectiveFinish: sql<string | null>`coalesce(${variants.finishOverride}, ${products.finish})`,
+      effectiveNotes: sql<string | null>`coalesce(${variants.notesOverride}, ${products.internalNotes})`,
+      effectiveImageKey: sql<string | null>`coalesce(${variants.imageKey}, ${products.imageKey})`,
+      effectiveImageMime: sql<string | null>`coalesce(${variants.imageMime}, ${products.imageMime})`,
+      effectiveImageOriginalName: sql<
+        string | null
+      >`coalesce(${variants.imageOriginalName}, ${products.imageOriginalName})`,
+      effectiveImageBytes: sql<number | null>`coalesce(${variants.imageBytes}, ${products.imageBytes})`,
       printTimeMin: variants.printTimeMin,
       manualTimeMin: variants.manualTimeMin,
       filamentMaterialId: variants.filamentMaterialId,
@@ -376,6 +472,7 @@ export function listVariants(productId: number, opts?: { db?: Db }): VariantRow[
       active: variants.active,
     })
     .from(variants)
+    .innerJoin(products, eq(products.id, variants.productId))
     .leftJoin(materials, eq(materials.id, variants.filamentMaterialId))
     .where(eq(variants.productId, productId))
     .groupBy(variants.id)
@@ -396,6 +493,19 @@ export type FlatVariantRow = {
   active: boolean;
 };
 
+export type CatalogStatusFilter = "active" | "inactive" | "all";
+export type CatalogFilters = {
+  q?: string;
+  categoryId?: number | null;
+  status?: CatalogStatusFilter;
+  productType?: string | null;
+  theme?: string | null;
+};
+
+export type CatalogListRow = ProductRow & {
+  variants: VariantRow[];
+};
+
 /** Lista plana de variantes (p/ seleção em painéis de vínculo/presencial). */
 export function listAllVariants(opts?: { db?: Db }): FlatVariantRow[] {
   const db = dbOf(opts);
@@ -410,6 +520,7 @@ export function listAllVariants(opts?: { db?: Db }): FlatVariantRow[] {
     })
     .from(variants)
     .innerJoin(products, eq(products.id, variants.productId))
+    .where(and(eq(products.active, true), eq(variants.active, true)))
     .orderBy(products.name, variants.name)
     .all();
   const prices = db
@@ -421,6 +532,126 @@ export function listAllVariants(opts?: { db?: Db }): FlatVariantRow[] {
     maxByVariant.set(price.variantId, Math.max(maxByVariant.get(price.variantId) ?? 0, price.practicedPriceCents));
   }
   return rows.map((row) => ({ ...row, priceCents: maxByVariant.get(row.id) ?? row.costCents }));
+}
+
+export function listCatalog(filters: CatalogFilters = {}, opts?: { db?: Db }): CatalogListRow[] {
+  const db = dbOf(opts);
+  const status = filters.status ?? "active";
+  const needle = normalizeName(filters.q ?? "").toLowerCase();
+  const productsRows = listProducts({ db }).filter((product) => {
+    if (status === "active" && !product.active) return false;
+    if (filters.categoryId !== undefined && filters.categoryId !== null && product.categoryId !== filters.categoryId) {
+      return false;
+    }
+    if (filters.productType && product.productType !== filters.productType) return false;
+    if (filters.theme && product.theme !== filters.theme) return false;
+    return true;
+  });
+  const ids = productsRows.map((product) => product.id);
+  if (ids.length === 0) return [];
+  const allVariants = listVariantsForProducts(db, ids);
+  const variantsByProduct = new Map<number, VariantRow[]>();
+  for (const variant of allVariants) {
+    const list = variantsByProduct.get(variant.productId) ?? [];
+    list.push(variant);
+    variantsByProduct.set(variant.productId, list);
+  }
+  const result: CatalogListRow[] = [];
+  for (const product of productsRows) {
+    const productVariants = variantsByProduct.get(product.id) ?? [];
+    const variantsForStatus = productVariants.filter((variant) => {
+      if (status === "active") return variant.active && product.active;
+      if (status === "inactive") return !variant.active || !product.active;
+      return true;
+    });
+    if (status === "inactive" && product.active && variantsForStatus.length === 0) continue;
+    const matchedVariants = needle
+      ? variantsForStatus.filter((variant) =>
+          [
+            product.name,
+            product.categoryName,
+            product.productType,
+            product.theme,
+            variant.name,
+            variant.sku,
+            variant.effectiveColor,
+            variant.effectiveSize,
+            variant.effectiveFinish,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(needle),
+        )
+      : variantsForStatus;
+    const productMatches = needle
+      ? [product.name, product.categoryName, product.productType, product.theme]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(needle)
+      : true;
+    if (productMatches || matchedVariants.length > 0) {
+      result.push({ ...product, variants: matchedVariants.length > 0 ? matchedVariants : variantsForStatus });
+    }
+  }
+  return result;
+}
+
+function listVariantsForProducts(db: Db, productIds: number[]): VariantRow[] {
+  if (productIds.length === 0) return [];
+  return db
+    .select({
+      id: variants.id,
+      productId: variants.productId,
+      sku: variants.sku,
+      name: variants.name,
+      colorOverride: variants.colorOverride,
+      sizeOverride: variants.sizeOverride,
+      finishOverride: variants.finishOverride,
+      notesOverride: variants.notesOverride,
+      imageKey: variants.imageKey,
+      imageMime: variants.imageMime,
+      imageOriginalName: variants.imageOriginalName,
+      imageBytes: variants.imageBytes,
+      productName: products.name,
+      productType: products.productType,
+      theme: products.theme,
+      productColor: products.primaryColor,
+      productSize: products.sizeLabel,
+      productFinish: products.finish,
+      productNotes: products.internalNotes,
+      productImageKey: products.imageKey,
+      productImageMime: products.imageMime,
+      productImageOriginalName: products.imageOriginalName,
+      productImageBytes: products.imageBytes,
+      effectiveColor: sql<string | null>`coalesce(${variants.colorOverride}, ${products.primaryColor})`,
+      effectiveSize: sql<string | null>`coalesce(${variants.sizeOverride}, ${products.sizeLabel})`,
+      effectiveFinish: sql<string | null>`coalesce(${variants.finishOverride}, ${products.finish})`,
+      effectiveNotes: sql<string | null>`coalesce(${variants.notesOverride}, ${products.internalNotes})`,
+      effectiveImageKey: sql<string | null>`coalesce(${variants.imageKey}, ${products.imageKey})`,
+      effectiveImageMime: sql<string | null>`coalesce(${variants.imageMime}, ${products.imageMime})`,
+      effectiveImageOriginalName: sql<
+        string | null
+      >`coalesce(${variants.imageOriginalName}, ${products.imageOriginalName})`,
+      effectiveImageBytes: sql<number | null>`coalesce(${variants.imageBytes}, ${products.imageBytes})`,
+      printTimeMin: variants.printTimeMin,
+      manualTimeMin: variants.manualTimeMin,
+      filamentMaterialId: variants.filamentMaterialId,
+      materialName: materials.name,
+      materialPricePerKgCents: materials.pricePerKgCents,
+      filamentGrams: variants.filamentGrams,
+      packagingCents: variants.packagingCents,
+      accessoriesCents: variants.accessoriesCents,
+      costCents: variants.costCents,
+      active: variants.active,
+    })
+    .from(variants)
+    .innerJoin(products, eq(products.id, variants.productId))
+    .leftJoin(materials, eq(materials.id, variants.filamentMaterialId))
+    .where(inArray(variants.productId, productIds))
+    .orderBy(products.name, variants.name)
+    .all();
 }
 
 export function createVariant(
@@ -442,6 +673,10 @@ export function createVariant(
         productId,
         sku: data.sku,
         name: data.name,
+        colorOverride: data.colorOverride ?? null,
+        sizeOverride: data.sizeOverride ?? null,
+        finishOverride: data.finishOverride ?? null,
+        notesOverride: data.notesOverride ?? null,
         printTimeMin: data.printTimeMin,
         manualTimeMin: data.manualTimeMin,
         filamentMaterialId: data.filamentMaterialId,
@@ -477,6 +712,10 @@ export function updateVariant(id: number, patch: VariantPatch, opts?: { db?: Db 
       .set({
         ...(data.sku !== undefined ? { sku: data.sku } : {}),
         ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.colorOverride !== undefined ? { colorOverride: data.colorOverride } : {}),
+        ...(data.sizeOverride !== undefined ? { sizeOverride: data.sizeOverride } : {}),
+        ...(data.finishOverride !== undefined ? { finishOverride: data.finishOverride } : {}),
+        ...(data.notesOverride !== undefined ? { notesOverride: data.notesOverride } : {}),
         ...(data.printTimeMin !== undefined ? { printTimeMin: data.printTimeMin } : {}),
         ...(data.manualTimeMin !== undefined ? { manualTimeMin: data.manualTimeMin } : {}),
         ...(data.filamentMaterialId !== undefined ? { filamentMaterialId: data.filamentMaterialId } : {}),
@@ -520,6 +759,154 @@ export function deleteVariant(id: number, opts?: { db?: Db }): ServiceResult<{ i
   if (count <= 1) return { ok: false, error: "produto precisa de ao menos 1 variante" };
   db.delete(variants).where(eq(variants.id, id)).run();
   return { ok: true, value: { id } };
+}
+
+/* ============================== Catalog images ============================== */
+
+type CatalogImageUpload = { bytes: Buffer; mime: string; originalName: string };
+type CatalogOwnerType = "product" | "variant";
+
+export async function replaceProductImage(
+  productId: number,
+  upload: CatalogImageUpload | null,
+  opts?: { db?: Db; mediaStore?: CatalogMediaStore },
+): Promise<ServiceResult<{ image: CatalogImageMetadata | null }>> {
+  const db = dbOf(opts);
+  const store = mediaStoreOf(opts);
+  const row = db
+    .select({ id: products.id, imageKey: products.imageKey })
+    .from(products)
+    .where(eq(products.id, productId))
+    .get();
+  if (!row) return { ok: false, error: "produto não encontrado" };
+  return replaceImage(
+    upload,
+    row.imageKey,
+    (image) =>
+      db
+        .update(products)
+        .set({
+          imageKey: image?.key ?? null,
+          imageMime: image?.mime ?? null,
+          imageOriginalName: image?.originalName ?? null,
+          imageBytes: image?.bytes ?? null,
+          updatedAt: now(),
+        })
+        .where(eq(products.id, productId))
+        .run(),
+    store,
+  );
+}
+
+export async function replaceVariantImage(
+  variantId: number,
+  upload: CatalogImageUpload | null,
+  opts?: { db?: Db; mediaStore?: CatalogMediaStore },
+): Promise<ServiceResult<{ image: CatalogImageMetadata | null }>> {
+  const db = dbOf(opts);
+  const store = mediaStoreOf(opts);
+  const row = db
+    .select({ id: variants.id, imageKey: variants.imageKey })
+    .from(variants)
+    .where(eq(variants.id, variantId))
+    .get();
+  if (!row) return { ok: false, error: "variante não encontrada" };
+  return replaceImage(
+    upload,
+    row.imageKey,
+    (image) =>
+      db
+        .update(variants)
+        .set({
+          imageKey: image?.key ?? null,
+          imageMime: image?.mime ?? null,
+          imageOriginalName: image?.originalName ?? null,
+          imageBytes: image?.bytes ?? null,
+          updatedAt: now(),
+        })
+        .where(eq(variants.id, variantId))
+        .run(),
+    store,
+  );
+}
+
+async function replaceImage(
+  upload: CatalogImageUpload | null,
+  previousKey: string | null,
+  persist: (image: CatalogImageMetadata | null) => void,
+  store: CatalogMediaStore,
+): Promise<ServiceResult<{ image: CatalogImageMetadata | null }>> {
+  let saved: CatalogImageMetadata | null = null;
+  try {
+    saved = upload ? await store.save(upload) : null;
+    persist(saved);
+    await store.delete(previousKey);
+    return { ok: true, value: { image: saved } };
+  } catch (error) {
+    await store.delete(saved?.key);
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export function getCatalogImageMetadata(
+  ownerType: CatalogOwnerType,
+  ownerId: number,
+  opts?: { db?: Db },
+): ServiceResult<CatalogImageMetadata & { ownerType: CatalogOwnerType; ownerId: number }> {
+  const db = dbOf(opts);
+  if (ownerType === "product") {
+    const row = db
+      .select({
+        imageKey: products.imageKey,
+        imageMime: products.imageMime,
+        imageOriginalName: products.imageOriginalName,
+        imageBytes: products.imageBytes,
+      })
+      .from(products)
+      .where(eq(products.id, ownerId))
+      .get();
+    if (!row) return { ok: false, error: "produto não encontrado" };
+    if (!row.imageKey || !row.imageMime || !row.imageOriginalName || !row.imageBytes) {
+      return { ok: false, error: "imagem não encontrada" };
+    }
+    return {
+      ok: true,
+      value: {
+        ownerType,
+        ownerId,
+        key: row.imageKey,
+        mime: row.imageMime as CatalogImageMetadata["mime"],
+        originalName: row.imageOriginalName,
+        bytes: row.imageBytes,
+      },
+    };
+  }
+  const row = db
+    .select({
+      imageKey: sql<string | null>`coalesce(${variants.imageKey}, ${products.imageKey})`,
+      imageMime: sql<string | null>`coalesce(${variants.imageMime}, ${products.imageMime})`,
+      imageOriginalName: sql<string | null>`coalesce(${variants.imageOriginalName}, ${products.imageOriginalName})`,
+      imageBytes: sql<number | null>`coalesce(${variants.imageBytes}, ${products.imageBytes})`,
+    })
+    .from(variants)
+    .innerJoin(products, eq(products.id, variants.productId))
+    .where(eq(variants.id, ownerId))
+    .get();
+  if (!row) return { ok: false, error: "variante não encontrada" };
+  if (!row.imageKey || !row.imageMime || !row.imageOriginalName || !row.imageBytes) {
+    return { ok: false, error: "imagem não encontrada" };
+  }
+  return {
+    ok: true,
+    value: {
+      ownerType,
+      ownerId,
+      key: row.imageKey,
+      mime: row.imageMime as CatalogImageMetadata["mime"],
+      originalName: row.imageOriginalName,
+      bytes: row.imageBytes,
+    },
+  };
 }
 
 /* ============================== Materials ============================== */
@@ -903,7 +1290,8 @@ export type ProductCodeRow = {
   id: number;
   variantId: number;
   code: string;
-  channel: string | null; // null = geral (vale para qualquer canal)
+  channel: string;
+  normalizedCode: string;
 };
 
 export function listProductCodes(variantId: number, opts?: { db?: Db }): ProductCodeRow[] {
@@ -914,6 +1302,7 @@ export function listProductCodes(variantId: number, opts?: { db?: Db }): Product
       variantId: productCodes.variantId,
       code: productCodes.code,
       channel: productCodes.channel,
+      normalizedCode: productCodes.normalizedCode,
     })
     .from(productCodes)
     .where(eq(productCodes.variantId, variantId))
@@ -931,26 +1320,24 @@ export function createProductCode(
   const parsed = productCodeInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: zodMessage(parsed.error.issues) };
   const { code, channel } = parsed.data;
-  const channelValue = channel === "geral" ? null : channel;
-  const needle = code.toLowerCase();
+  const normalizedCode = normalizeCode(code);
   const clash = db
     .select({ id: productCodes.id, code: productCodes.code, channel: productCodes.channel })
     .from(productCodes)
-    .where(eq(sql`lower(${productCodes.code})`, needle))
+    .where(and(eq(productCodes.channel, channel), eq(productCodes.normalizedCode, normalizedCode)))
     .all()
-    .find(
-      (row) =>
-        row.code.toLowerCase() === needle &&
-        (channelValue === null ? row.channel === null : row.channel === channelValue),
-    );
+    .find((row) => row.channel === channel);
   if (clash) {
     return { ok: false, error: `código "${code}" já cadastrado para canal ${productCodeChannelLabel(channel)}` };
   }
   try {
-    const inserted = db.insert(productCodes).values({ variantId, code, channel: channelValue, createdAt: now() }).run();
+    const inserted = db
+      .insert(productCodes)
+      .values({ variantId, code, channel, normalizedCode, createdAt: now() })
+      .run();
     return {
       ok: true,
-      value: { code: { id: Number(inserted.lastInsertRowid), variantId, code, channel: channelValue } },
+      value: { code: { id: Number(inserted.lastInsertRowid), variantId, code, channel, normalizedCode } },
     };
   } catch (error) {
     if (error instanceof Error && /UNIQUE/.test(error.message)) {
@@ -1017,7 +1404,7 @@ export function linkUnlinkedToVariant(
   const isTiktok = input.channel === "tiktok";
   const key = normalizeName(input.cProd);
   const channelForCode = input.channel === "shopee" || input.channel === "tiktok" ? input.channel : "geral";
-  const channelValue = channelForCode === "geral" ? null : channelForCode;
+  const normalizedCode = normalizeCode(key);
 
   const existing = db
     .select({
@@ -1027,9 +1414,9 @@ export function linkUnlinkedToVariant(
       channel: productCodes.channel,
     })
     .from(productCodes)
-    .where(eq(sql`lower(${productCodes.code})`, key.toLowerCase()))
+    .where(and(eq(productCodes.channel, channelForCode), eq(productCodes.normalizedCode, normalizedCode)))
     .all()
-    .find((row) => (channelValue === null ? row.channel === null : row.channel === channelValue));
+    .find((row) => row.channel === channelForCode);
 
   let learned = false;
   if (existing) {
@@ -1104,7 +1491,7 @@ export function repairTikTokLinks(opts?: { db?: Db }): ServiceResult<{ unlinked:
   const db = dbOf(opts);
 
   db.delete(productCodes)
-    .where(and(eq(productCodes.code, "Padrao"), eq(productCodes.channel, "tiktok")))
+    .where(and(eq(productCodes.normalizedCode, "PADRAO"), eq(productCodes.channel, "tiktok")))
     .run();
 
   const toUnlink = db

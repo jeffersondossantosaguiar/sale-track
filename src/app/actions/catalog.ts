@@ -38,6 +38,8 @@ import {
   recalcAllCosts,
   renameCategory as renameCategoryService,
   repairTikTokLinks,
+  replaceProductImage,
+  replaceVariantImage,
   saveChannelFeeTiers,
   setProductActive as setProductActiveService,
   setVariantActive as setVariantActiveService,
@@ -74,6 +76,12 @@ function productForm(formData: FormData) {
   return {
     name: String(formData.get("name") ?? ""),
     categoryId: parseOptionalId(formData.get("categoryId")),
+    productType: String(formData.get("productType") ?? ""),
+    theme: String(formData.get("theme") ?? ""),
+    primaryColor: String(formData.get("primaryColor") ?? ""),
+    sizeLabel: String(formData.get("sizeLabel") ?? ""),
+    finish: String(formData.get("finish") ?? ""),
+    internalNotes: String(formData.get("internalNotes") ?? ""),
     ...(marginRaw !== "" ? { marginBps: percentToBps(Number(marginRaw)) } : {}),
   };
 }
@@ -82,6 +90,10 @@ function variantForm(formData: FormData) {
   return {
     sku: String(formData.get("sku") ?? ""),
     name: String(formData.get("name") ?? ""),
+    colorOverride: String(formData.get("colorOverride") ?? ""),
+    sizeOverride: String(formData.get("sizeOverride") ?? ""),
+    finishOverride: String(formData.get("finishOverride") ?? ""),
+    notesOverride: String(formData.get("notesOverride") ?? ""),
     printTimeMin: Number(formData.get("printTimeMin") ?? 0),
     manualTimeMin: Number(formData.get("manualTimeMin") ?? 0),
     filamentMaterialId: parseOptionalId(formData.get("filamentMaterialId")),
@@ -89,6 +101,12 @@ function variantForm(formData: FormData) {
     packagingCents: Number(formData.get("packagingCents") ?? 0),
     accessoriesCents: Number(formData.get("accessoriesCents") ?? 0),
   };
+}
+
+async function imageUpload(formData: FormData): Promise<{ bytes: Buffer; mime: string; originalName: string } | null> {
+  const value = formData.get("image");
+  if (!(value instanceof File) || value.size === 0) return null;
+  return { bytes: Buffer.from(await value.arrayBuffer()), mime: value.type, originalName: value.name };
 }
 
 /* ============================== Categories ============================== */
@@ -123,6 +141,11 @@ export async function createProduct(formData: FormData): Promise<ActionResult<{ 
   const db = getDb().db;
   const result = createProductService(productForm(formData), { db });
   if (!result.ok) return actionError(result.error);
+  const image = await imageUpload(formData);
+  if (image) {
+    const imageResult = await replaceProductImage(result.value.id, image, { db });
+    if (!imageResult.ok) return actionError(imageResult.error);
+  }
   revalidatePath("/products");
   return actionData({ products: listProducts({ db }) });
 }
@@ -132,10 +155,24 @@ export async function updateProduct(formData: FormData): Promise<ActionResult<{ 
   const patch: Record<string, unknown> = {};
   if (formData.has("name")) patch.name = String(formData.get("name"));
   if (formData.has("categoryId")) patch.categoryId = parseOptionalId(formData.get("categoryId"));
+  for (const key of ["productType", "theme", "primaryColor", "sizeLabel", "finish", "internalNotes"]) {
+    if (formData.has(key)) patch[key] = String(formData.get(key) ?? "");
+  }
   if (formData.has("marginBps") && String(formData.get("marginBps")) !== "")
     patch.marginBps = percentToBps(Number(formData.get("marginBps")));
-  const result = updateProductService(Number(formData.get("id")), patch, { db });
+  const id = Number(formData.get("id"));
+  const result = updateProductService(id, patch, { db });
   if (!result.ok) return actionError(result.error);
+  if (String(formData.get("imageIntent") ?? "keep") === "remove") {
+    const imageResult = await replaceProductImage(id, null, { db });
+    if (!imageResult.ok) return actionError(imageResult.error);
+  } else {
+    const image = await imageUpload(formData);
+    if (image) {
+      const imageResult = await replaceProductImage(id, image, { db });
+      if (!imageResult.ok) return actionError(imageResult.error);
+    }
+  }
   revalidatePath("/products");
   return actionData({ products: listProducts({ db }) });
 }
@@ -168,6 +205,11 @@ export async function createVariant(formData: FormData): Promise<ActionResult<{ 
   const productId = Number(formData.get("productId"));
   const result = createVariantService(productId, variantForm(formData), { db });
   if (!result.ok) return actionError(result.error);
+  const image = await imageUpload(formData);
+  if (image) {
+    const imageResult = await replaceVariantImage(result.value.id, image, { db });
+    if (!imageResult.ok) return actionError(imageResult.error);
+  }
   revalidatePath("/products");
   return actionData({ variants: listVariants(productId, { db }) });
 }
@@ -179,6 +221,9 @@ export async function updateVariant(formData: FormData): Promise<ActionResult<{ 
   const patch: Record<string, unknown> = {};
   if (formData.has("sku")) patch.sku = String(formData.get("sku"));
   if (formData.has("name")) patch.name = String(formData.get("name"));
+  for (const key of ["colorOverride", "sizeOverride", "finishOverride", "notesOverride"]) {
+    if (formData.has(key)) patch[key] = String(formData.get(key) ?? "");
+  }
   if (formData.has("printTimeMin")) patch.printTimeMin = Number(formData.get("printTimeMin"));
   if (formData.has("manualTimeMin")) patch.manualTimeMin = Number(formData.get("manualTimeMin"));
   if (formData.has("filamentMaterialId"))
@@ -188,6 +233,16 @@ export async function updateVariant(formData: FormData): Promise<ActionResult<{ 
   if (formData.has("accessoriesCents")) patch.accessoriesCents = Number(formData.get("accessoriesCents"));
   const result = updateVariantService(id, patch, { db });
   if (!result.ok) return actionError(result.error);
+  if (String(formData.get("imageIntent") ?? "keep") === "remove") {
+    const imageResult = await replaceVariantImage(id, null, { db });
+    if (!imageResult.ok) return actionError(imageResult.error);
+  } else {
+    const image = await imageUpload(formData);
+    if (image) {
+      const imageResult = await replaceVariantImage(id, image, { db });
+      if (!imageResult.ok) return actionError(imageResult.error);
+    }
+  }
   revalidatePath("/products");
   return actionData({ variants: listVariants(productId, { db }) });
 }

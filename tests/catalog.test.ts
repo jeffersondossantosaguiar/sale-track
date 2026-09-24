@@ -1,6 +1,7 @@
 import {
   createCategory,
   createProduct,
+  createProductCode,
   createVariant,
   deleteCategory,
   deleteProduct,
@@ -15,7 +16,7 @@ import {
 } from "@/lib/catalog/service";
 import type { Db } from "@/lib/db/client";
 import { categories, productCodes, products, saleItems, sales, variants } from "@/lib/db/schema";
-import { DEFAULT_CATEGORIES, categoryNameSchema, productInputSchema } from "@/lib/domain/catalog";
+import { DEFAULT_CATEGORIES, categoryNameSchema, normalizeCode, productInputSchema } from "@/lib/domain/catalog";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { setupTestDb } from "./helpers/db";
@@ -194,7 +195,7 @@ describe("catalog.service", () => {
       const p = createProduct({ name: "Rascunho", categoryId: null }, { db });
       if (!p.ok) return;
       const variantId = defaultVariantId(db, p.value.id);
-      db.insert(productCodes).values({ variantId, code: "ZZ9", channel: "shopee" }).run();
+      createProductCode(variantId, { code: "ZZ9", channel: "shopee" }, { db });
       expect(deleteProduct(p.value.id, { db }).ok).toBe(true);
       expect(listProducts({ db })).toHaveLength(0);
     } finally {
@@ -208,8 +209,8 @@ describe("catalog.service", () => {
       const p = createProduct({ name: "Anel Goomba", categoryId: null }, { db });
       if (!p.ok) return;
       const variantId = defaultVariantId(db, p.value.id);
-      db.insert(productCodes).values({ variantId, code: "S1", channel: "shopee" }).run();
-      db.insert(productCodes).values({ variantId, code: "T1", channel: "tiktok" }).run();
+      createProductCode(variantId, { code: "S1", channel: "shopee" }, { db });
+      createProductCode(variantId, { code: "T1", channel: "tiktok" }, { db });
       const variant = listVariants(p.value.id, { db })[0];
       expect(variant.accessoriesCents).toBe(0);
     } finally {
@@ -352,7 +353,9 @@ describe("catalog.service", () => {
           },
         ])
         .run();
-      db.insert(productCodes).values({ variantId, code: "Padrao", channel: "tiktok" }).run();
+      db.insert(productCodes)
+        .values({ variantId, code: "Padrao", normalizedCode: normalizeCode("Padrao"), channel: "tiktok" })
+        .run();
 
       const res = repairTikTokLinks({ db });
       expect(res.ok).toBe(true);
